@@ -11,7 +11,10 @@ export interface IImageProcessingService {
     maxColors: number,
     threadPalette: string,
     selectedStitchKinds: StitchKind[],
+    stitchBackground: boolean,
   ): Promise<{
+    width: number;
+    height: number;
     patternData: PatternCell[][];
     palette: Array<{
       manufacturer: string;

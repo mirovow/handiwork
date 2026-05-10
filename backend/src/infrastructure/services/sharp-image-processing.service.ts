@@ -24,21 +24,29 @@ export class SharpImageProcessingService implements IImageProcessingService {
     maxColors: number,
     threadPalette: string,
     selectedStitchKinds: StitchKind[] = ['full_cross'],
+    stitchBackground = true,
   ) {
     if (!isThreadPaletteId(threadPalette)) {
       throw new Error(`Unknown thread palette: ${threadPalette}`);
     }
 
     const sourcePalette = getThreadPalette(threadPalette);
+    const metadata = await sharp(inputPath).metadata();
+    const { width: actualWidth, height: actualHeight } = this.calculatePatternSize(
+      metadata.width ?? width,
+      metadata.height ?? height,
+      width,
+      height,
+    );
     const rawImage = await sharp(inputPath)
-      .resize(width, height, {
-        fit: 'contain',
+      .resize(actualWidth, actualHeight, {
         kernel: sharp.kernel.nearest // Nearest neighbor to keep pixel art style
       })
       .raw()
       .toBuffer({ resolveWithObject: true });
 
     const { data, info } = rawImage;
+    const backgroundMask = stitchBackground ? new Set<number>() : this.createBackgroundMask(data, info);
     const initialPatternData: string[][] = [];
     const paletteStats = new Map<string, { color: ThreadColor; count: number }>();
 
@@ -52,7 +60,7 @@ export class SharpImageProcessingService implements IImageProcessingService {
         const a = info.channels === 4 ? data[offset + 3] : 255;
 
         // Skip transparent pixels or treat as white/empty
-        if (a < 128) {
+        if (a < 128 || backgroundMask.has(y * info.width + x)) {
           row.push('EMPTY');
           continue;
         }
@@ -150,9 +158,140 @@ export class SharpImageProcessingService implements IImageProcessingService {
     }).toFile(outputPath);
 
     return {
+      width: info.width,
+      height: info.height,
       patternData,
       palette: Array.from(usedPaletteMap.values()),
     };
+  }
+
+  private calculatePatternSize(
+    sourceWidth: number,
+    sourceHeight: number,
+    maxWidth: number,
+    maxHeight: number,
+  ): { width: number; height: number } {
+    const sourceAspectRatio = sourceWidth / sourceHeight;
+    const targetAspectRatio = maxWidth / maxHeight;
+
+    if (sourceAspectRatio >= targetAspectRatio) {
+      return {
+        width: maxWidth,
+        height: Math.max(1, Math.round(maxWidth / sourceAspectRatio)),
+      };
+    }
+
+    return {
+      width: Math.max(1, Math.round(maxHeight * sourceAspectRatio)),
+      height: maxHeight,
+    };
+  }
+
+  private createBackgroundMask(
+    data: Buffer,
+    info: { width: number; height: number; channels: number },
+  ): Set<number> {
+    const backgroundColor = this.findDominantEdgeColor(data, info);
+    if (!backgroundColor) {
+      return new Set<number>();
+    }
+
+    const mask = new Set<number>();
+    const queue: Array<{ x: number; y: number }> = [];
+    const enqueue = (x: number, y: number) => {
+      const key = y * info.width + x;
+      if (mask.has(key) || !this.isBackgroundLikePixel(data, info, x, y, backgroundColor)) {
+        return;
+      }
+
+      mask.add(key);
+      queue.push({ x, y });
+    };
+
+    for (let x = 0; x < info.width; x++) {
+      enqueue(x, 0);
+      enqueue(x, info.height - 1);
+    }
+
+    for (let y = 0; y < info.height; y++) {
+      enqueue(0, y);
+      enqueue(info.width - 1, y);
+    }
+
+    for (let index = 0; index < queue.length; index++) {
+      const { x, y } = queue[index];
+      if (x > 0) enqueue(x - 1, y);
+      if (x < info.width - 1) enqueue(x + 1, y);
+      if (y > 0) enqueue(x, y - 1);
+      if (y < info.height - 1) enqueue(x, y + 1);
+    }
+
+    return mask;
+  }
+
+  private findDominantEdgeColor(
+    data: Buffer,
+    info: { width: number; height: number; channels: number },
+  ): [number, number, number] | null {
+    const buckets = new Map<string, { count: number; r: number; g: number; b: number }>();
+    const addPixel = (x: number, y: number) => {
+      const offset = (y * info.width + x) * info.channels;
+      const a = info.channels === 4 ? data[offset + 3] : 255;
+      if (a < 128) {
+        return;
+      }
+
+      const r = data[offset];
+      const g = data[offset + 1];
+      const b = data[offset + 2];
+      const key = `${r >> 4}:${g >> 4}:${b >> 4}`;
+      const existing = buckets.get(key) ?? { count: 0, r: 0, g: 0, b: 0 };
+      existing.count += 1;
+      existing.r += r;
+      existing.g += g;
+      existing.b += b;
+      buckets.set(key, existing);
+    };
+
+    for (let x = 0; x < info.width; x++) {
+      addPixel(x, 0);
+      addPixel(x, info.height - 1);
+    }
+
+    for (let y = 1; y < info.height - 1; y++) {
+      addPixel(0, y);
+      addPixel(info.width - 1, y);
+    }
+
+    const dominant = Array.from(buckets.values()).sort((a, b) => b.count - a.count)[0];
+    if (!dominant) {
+      return null;
+    }
+
+    return [
+      Math.round(dominant.r / dominant.count),
+      Math.round(dominant.g / dominant.count),
+      Math.round(dominant.b / dominant.count),
+    ];
+  }
+
+  private isBackgroundLikePixel(
+    data: Buffer,
+    info: { width: number; height: number; channels: number },
+    x: number,
+    y: number,
+    backgroundColor: [number, number, number],
+  ): boolean {
+    const offset = (y * info.width + x) * info.channels;
+    const a = info.channels === 4 ? data[offset + 3] : 255;
+    if (a < 128) {
+      return false;
+    }
+
+    const dr = data[offset] - backgroundColor[0];
+    const dg = data[offset + 1] - backgroundColor[1];
+    const db = data[offset + 2] - backgroundColor[2];
+    return dr * dr + dg * dg + db * db <= 45 * 45;
   }
 
   private findNearestColor(

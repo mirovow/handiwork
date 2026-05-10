@@ -15,6 +15,7 @@ export const api = {
     maxColors: number,
     threadPalette: string,
     selectedStitchKinds: StitchKind[],
+    stitchBackground: boolean,
   ) => {
     const formData = new FormData();
     formData.append('image', file);
@@ -23,6 +24,7 @@ export const api = {
     formData.append('maxColors', maxColors.toString());
     formData.append('threadPalette', threadPalette);
     formData.append('selectedStitchKinds', selectedStitchKinds.join(','));
+    formData.append('stitchBackground', stitchBackground.toString());
 
     const res = await fetch(`${API_URL}/patterns`, {
       method: 'POST',

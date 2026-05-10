@@ -48,6 +48,30 @@ describe('SharpImageProcessingService', () => {
     );
   });
 
+  it('preserves source aspect ratio inside the requested pattern bounds', async () => {
+    const inputPath = join(tempDir, 'wide-input.png');
+    const outputPath = join(tempDir, 'wide-output.png');
+
+    await sharp(Buffer.alloc(200 * 100 * 3, 255), {
+      raw: {
+        width: 200,
+        height: 100,
+        channels: 3,
+      },
+    }).png().toFile(inputPath);
+
+    const service = new SharpImageProcessingService();
+    const result = await service.processImage(inputPath, outputPath, 100, 100, 10, 'DMC');
+    const outputMetadata = await sharp(outputPath).metadata();
+
+    expect(result.width).toBe(100);
+    expect(result.height).toBe(50);
+    expect(result.patternData).toHaveLength(50);
+    expect(result.patternData[0]).toHaveLength(100);
+    expect(outputMetadata.width).toBe(100);
+    expect(outputMetadata.height).toBe(50);
+  });
+
   it('uses the requested thread palette for generated colors', async () => {
     const inputPath = join(tempDir, 'anchor-input.png');
     const outputPath = join(tempDir, 'anchor-output.png');
@@ -141,5 +165,57 @@ describe('SharpImageProcessingService', () => {
 
     expect(result.patternData).toEqual([[{ x: 0, y: 0, stitches: [] }]]);
     expect(result.palette).toEqual([]);
+  });
+
+  it('removes only edge-connected background when background stitching is disabled', async () => {
+    const inputPath = join(tempDir, 'background-input.png');
+    const outputPath = join(tempDir, 'background-output.png');
+    const white = [255, 255, 255];
+    const black = [0, 0, 0];
+    const image = Buffer.from([
+      ...white, ...white, ...white, ...white, ...white,
+      ...white, ...black, ...black, ...black, ...white,
+      ...white, ...black, ...white, ...black, ...white,
+      ...white, ...black, ...black, ...black, ...white,
+      ...white, ...white, ...white, ...white, ...white,
+    ]);
+
+    await sharp(image, {
+      raw: {
+        width: 5,
+        height: 5,
+        channels: 3,
+      },
+    }).png().toFile(inputPath);
+
+    const service = new SharpImageProcessingService();
+    const result = await service.processImage(inputPath, outputPath, 5, 5, 10, 'DMC', ['full_cross'], false);
+
+    expect(result.patternData[0][0].stitches).toEqual([]);
+    expect(result.patternData[2][2].stitches).toEqual([
+      expect.objectContaining({ kind: 'full_cross' }),
+    ]);
+  });
+
+  it('keeps the background when background stitching is enabled', async () => {
+    const inputPath = join(tempDir, 'stitched-background-input.png');
+    const outputPath = join(tempDir, 'stitched-background-output.png');
+
+    await sharp(Buffer.from([
+      255, 255, 255,
+      0, 0, 0,
+    ]), {
+      raw: {
+        width: 2,
+        height: 1,
+        channels: 3,
+      },
+    }).png().toFile(inputPath);
+
+    const service = new SharpImageProcessingService();
+    const result = await service.processImage(inputPath, outputPath, 2, 1, 10, 'DMC', ['full_cross'], true);
+
+    expect(result.patternData[0][0].stitches).toHaveLength(1);
+    expect(result.patternData[0][1].stitches).toHaveLength(1);
   });
 });

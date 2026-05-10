@@ -72,9 +72,17 @@ export class PatternController {
     @Body('maxColors') maxColors: string | undefined,
     @Body('threadPalette') threadPalette: string | undefined,
     @Body('selectedStitchKinds') selectedStitchKinds: string | undefined,
+    @Body('stitchBackground') stitchBackground: string | undefined,
   ) {
     this.validateImageFile(file);
-    const settings = this.parsePatternSettings(width, height, maxColors, threadPalette, selectedStitchKinds);
+    const settings = this.parsePatternSettings(
+      width,
+      height,
+      maxColors,
+      threadPalette,
+      selectedStitchKinds,
+      stitchBackground,
+    );
 
     return this.generatePatternUseCase.execute(file.path, {
       width: settings.width,
@@ -82,6 +90,7 @@ export class PatternController {
       maxColors: settings.maxColors,
       threadPalette: settings.threadPalette,
       selectedStitchKinds: settings.selectedStitchKinds,
+      stitchBackground: settings.stitchBackground,
     });
   }
 
@@ -120,12 +129,14 @@ export class PatternController {
     maxColors: string | undefined,
     threadPalette: string | undefined,
     selectedStitchKinds: string | undefined,
+    stitchBackground: string | undefined,
   ): {
     width: number;
     height: number;
     maxColors: number;
     threadPalette: ThreadPaletteId;
     selectedStitchKinds: StitchKind[];
+    stitchBackground: boolean;
   } {
     return {
       width: this.parsePatternDimension('width', width),
@@ -133,6 +144,7 @@ export class PatternController {
       maxColors: this.parseMaxColors(maxColors),
       threadPalette: this.parseThreadPalette(threadPalette),
       selectedStitchKinds: this.parseSelectedStitchKinds(selectedStitchKinds),
+      stitchBackground: this.parseStitchBackground(stitchBackground),
     };
   }
 
@@ -204,5 +216,21 @@ export class PatternController {
     }
 
     return uniqueKinds;
+  }
+
+  private parseStitchBackground(value: string | undefined): boolean {
+    if (value === undefined || value === '') {
+      return true;
+    }
+
+    if (value === 'true') {
+      return true;
+    }
+
+    if (value === 'false') {
+      return false;
+    }
+
+    throw new BadRequestException('stitchBackground must be true or false');
   }
 }

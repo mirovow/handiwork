@@ -13,6 +13,8 @@ describe('GeneratePatternUseCase', () => {
     };
     const imageProcessingService: jest.Mocked<IImageProcessingService> = {
       processImage: jest.fn().mockResolvedValue({
+        width: 16,
+        height: 8,
         patternData: [[{ x: 0, y: 0, stitches: [{ id: '0:0:full', kind: 'full_cross', threadCode: '310' }] }]],
         palette: [{ manufacturer: 'DMC', code: '310', name: 'Black', rgb: [0, 0, 0], hex: '#000000' }],
       }),
@@ -26,6 +28,7 @@ describe('GeneratePatternUseCase', () => {
       maxColors: 5,
       threadPalette: 'ANCHOR',
       selectedStitchKinds: ['full_cross', 'half_cross'],
+      stitchBackground: false,
     });
 
     expect(imageProcessingService.processImage).toHaveBeenCalledWith(
@@ -36,6 +39,7 @@ describe('GeneratePatternUseCase', () => {
       5,
       'ANCHOR',
       ['full_cross', 'half_cross'],
+      false,
     );
     expect(patternRepository.create).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -43,11 +47,12 @@ describe('GeneratePatternUseCase', () => {
         originalImagePath: 'uploads/source.png',
         schemaVersion: 2,
         settings: {
-          width: 20,
-          height: 10,
+          width: 16,
+          height: 8,
           maxColors: 5,
           threadPalette: 'ANCHOR',
           selectedStitchKinds: ['full_cross', 'half_cross'],
+          stitchBackground: false,
         },
         patternData: [[{ x: 0, y: 0, stitches: [{ id: '0:0:full', kind: 'full_cross', threadCode: '310' }] }]],
         backstitches: [],

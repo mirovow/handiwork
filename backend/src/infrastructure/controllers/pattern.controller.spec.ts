@@ -30,14 +30,14 @@ describe('PatternController', () => {
 
   it('rejects a missing image file', async () => {
     await expect(
-      controller.createPattern(undefined as unknown as Express.Multer.File, '100', '100', '30', 'DMC', undefined),
+      controller.createPattern(undefined as unknown as Express.Multer.File, '100', '100', '30', 'DMC', undefined, undefined),
     ).rejects.toThrow(BadRequestException);
   });
 
   it('rejects unsupported image MIME types', async () => {
     const file = { ...validFile, mimetype: 'image/gif' } as Express.Multer.File;
 
-    await expect(controller.createPattern(file, '100', '100', '30', 'DMC', undefined)).rejects.toThrow(
+    await expect(controller.createPattern(file, '100', '100', '30', 'DMC', undefined, undefined)).rejects.toThrow(
       BadRequestException,
     );
   });
@@ -50,20 +50,20 @@ describe('PatternController', () => {
     ['100', '9'],
     ['100', '501'],
   ])('rejects invalid pattern dimensions %s x %s', async (width, height) => {
-    await expect(controller.createPattern(validFile, width, height, '30', 'DMC', undefined)).rejects.toThrow(
+    await expect(controller.createPattern(validFile, width, height, '30', 'DMC', undefined, undefined)).rejects.toThrow(
       BadRequestException,
     );
   });
 
   it.each(['abc', '1', '101'])('rejects invalid max colors %s', async (maxColors) => {
     await expect(
-      controller.createPattern(validFile, '100', '100', maxColors, 'DMC', undefined),
+      controller.createPattern(validFile, '100', '100', maxColors, 'DMC', undefined, undefined),
     ).rejects.toThrow(BadRequestException);
   });
 
   it('rejects unknown thread palettes', async () => {
     await expect(
-      controller.createPattern(validFile, '100', '100', '30', 'UNKNOWN', undefined),
+      controller.createPattern(validFile, '100', '100', '30', 'UNKNOWN', undefined, undefined),
     ).rejects.toThrow(BadRequestException);
   });
 
@@ -75,7 +75,7 @@ describe('PatternController', () => {
   });
 
   it('uses the default max colors when it is omitted', async () => {
-    await controller.createPattern(validFile, '120', '80', undefined, undefined, undefined);
+    await controller.createPattern(validFile, '120', '80', undefined, undefined, undefined, undefined);
 
     expect(generatePatternUseCase.execute).toHaveBeenCalledWith('uploads/source.png', {
       width: 120,
@@ -83,11 +83,12 @@ describe('PatternController', () => {
       maxColors: 30,
       threadPalette: 'DMC',
       selectedStitchKinds: ['full_cross'],
+      stitchBackground: true,
     });
   });
 
   it('passes validated dimensions and file path to the use case', async () => {
-    await controller.createPattern(validFile, '120', '80', '24', 'ANCHOR', 'full_cross,half_cross');
+    await controller.createPattern(validFile, '120', '80', '24', 'ANCHOR', 'full_cross,half_cross', 'false');
 
     expect(generatePatternUseCase.execute).toHaveBeenCalledWith('uploads/source.png', {
       width: 120,
@@ -95,18 +96,25 @@ describe('PatternController', () => {
       maxColors: 24,
       threadPalette: 'ANCHOR',
       selectedStitchKinds: ['full_cross', 'half_cross'],
+      stitchBackground: false,
     });
   });
 
   it('rejects an empty selected stitch kind list', async () => {
     await expect(
-      controller.createPattern(validFile, '100', '100', '30', 'DMC', ''),
+      controller.createPattern(validFile, '100', '100', '30', 'DMC', '', undefined),
     ).rejects.toThrow(BadRequestException);
   });
 
   it('rejects unknown selected stitch kinds', async () => {
     await expect(
-      controller.createPattern(validFile, '100', '100', '30', 'DMC', 'full_cross,unknown'),
+      controller.createPattern(validFile, '100', '100', '30', 'DMC', 'full_cross,unknown', undefined),
+    ).rejects.toThrow(BadRequestException);
+  });
+
+  it('rejects invalid background stitching values', async () => {
+    await expect(
+      controller.createPattern(validFile, '100', '100', '30', 'DMC', 'full_cross', 'maybe'),
     ).rejects.toThrow(BadRequestException);
   });
 });

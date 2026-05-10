@@ -25,6 +25,7 @@ export class PatternModel {
     maxColors: number;
     threadPalette: string;
     selectedStitchKinds: StitchKind[];
+    stitchBackground: boolean;
   };
 
   @Prop({ type: Array })

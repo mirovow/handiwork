@@ -48,6 +48,7 @@ export class Pattern {
     maxColors: number;
     threadPalette: string;
     selectedStitchKinds: StitchKind[];
+    stitchBackground: boolean;
   };
   palette: Array<{
     manufacturer: string;
@@ -60,6 +61,7 @@ export class Pattern {
   backstitches: Backstitch[];
   knots: FrenchKnot[];
   createdAt: Date;
+  updatedAt: Date;
 
   constructor(partial: Partial<Pattern>) {
     Object.assign(this, partial);

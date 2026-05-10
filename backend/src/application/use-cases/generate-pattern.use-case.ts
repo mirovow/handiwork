@@ -25,6 +25,7 @@ export class GeneratePatternUseCase {
       maxColors: number;
       threadPalette: string;
       selectedStitchKinds: StitchKind[];
+      stitchBackground: boolean;
     },
   ): Promise<Pattern> {
     const id = randomUUID();
@@ -32,7 +33,12 @@ export class GeneratePatternUseCase {
     const outputPath = join(this.uploadsDir, patternFileName);
     const patternImagePath = `uploads/${patternFileName}`;
 
-    const { patternData, palette } = await this.imageProcessingService.processImage(
+    const {
+      width: actualWidth,
+      height: actualHeight,
+      patternData,
+      palette,
+    } = await this.imageProcessingService.processImage(
       inputImagePath,
       outputPath,
       settings.width,
@@ -40,6 +46,7 @@ export class GeneratePatternUseCase {
       settings.maxColors,
       settings.threadPalette,
       settings.selectedStitchKinds,
+      settings.stitchBackground,
     );
 
     const pattern = new Pattern({
@@ -47,7 +54,11 @@ export class GeneratePatternUseCase {
       schemaVersion: 2,
       originalImagePath: inputImagePath,
       patternImagePath,
-      settings,
+      settings: {
+        ...settings,
+        width: actualWidth,
+        height: actualHeight,
+      },
       palette,
       patternData,
       backstitches: [],
