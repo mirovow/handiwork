@@ -687,10 +687,10 @@
   <title>Рабочая область - CrossStitch</title>
 </svelte:head>
 
-<div class="relative h-full w-full overflow-hidden bg-gray-100">
+<div class="relative h-full w-full overflow-hidden bg-[radial-gradient(circle_at_top_left,rgba(196,181,253,0.28),transparent_28rem),radial-gradient(circle_at_bottom_right,rgba(216,180,254,0.22),transparent_26rem),linear-gradient(135deg,#fbf7ff,#f3edff_45%,#f8fafc)]">
   {#if loading}
     <div class="flex h-full items-center justify-center">
-      <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+      <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-violet-500"></div>
     </div>
   {:else if !pattern}
     <div class="flex h-full items-center justify-center">
@@ -716,7 +716,7 @@
 
     {#if threadTooltipCell && tooltipThreadColor}
       <div
-        class="absolute z-30 w-64 rounded-2xl bg-white/95 p-4 text-sm shadow-2xl ring-1 ring-gray-200 backdrop-blur"
+        class="glass-panel absolute z-30 w-64 border-transparent p-4 text-sm ring-0"
         style={getThreadTooltipStyle()}
         role="tooltip"
       >
@@ -744,7 +744,7 @@
           href={getOzonSearchUrl(tooltipThreadColor)}
           target="_blank"
           rel="noopener noreferrer"
-          class="mt-3 inline-flex w-full items-center justify-center rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-700"
+          class="glass-button-primary mt-3 w-full"
         >
           Купить
         </a>
@@ -752,9 +752,9 @@
     {/if}
 
     <div class="pointer-events-none absolute left-4 right-4 top-4 z-20 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-      <div class="pointer-events-auto flex flex-wrap items-center gap-2 rounded-xl bg-white/95 p-2 text-sm shadow-lg ring-1 ring-gray-200 backdrop-blur">
+      <div class="glass-panel pointer-events-auto flex flex-wrap items-center gap-2 border-transparent p-2 text-sm ring-0">
         <a href="/gallery" class="rounded-lg px-3 py-2 font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900">&larr; В галерею</a>
-        <a href="/" class="rounded-lg bg-indigo-50 px-3 py-2 font-medium text-indigo-700 hover:bg-indigo-100">Новая схема</a>
+        <a href="/" class="rounded-lg bg-white/35 px-3 py-2 font-medium text-violet-700 ring-1 ring-violet-100/80 hover:bg-white/60">Новая схема</a>
         <div class="hidden h-6 w-px bg-gray-200 sm:block"></div>
         <div class="px-2 text-gray-700">
           <span class="font-medium text-gray-900">Схема</span>
@@ -762,22 +762,15 @@
         </div>
       </div>
 
-      <div class="pointer-events-auto flex flex-wrap items-center justify-end gap-2">
-        <div class="rounded-xl bg-white/95 px-4 py-3 text-sm shadow-lg ring-1 ring-gray-200 backdrop-blur">
+      <div class="pointer-events-auto flex w-full flex-col items-stretch gap-2 sm:w-auto">
+        <div class="glass-panel border-transparent px-4 py-3 text-sm ring-0">
           <div class="font-medium text-gray-900">Прогресс: {progressPercent}%</div>
           <div class="text-xs text-gray-500">{completedStitchIds.size} / {totalStitches} крестиков</div>
           <div class="mt-1 text-xs text-gray-500">Время: {formatElapsedTime(totalElapsedSeconds)}</div>
         </div>
-        <div class="rounded-xl bg-white/95 px-3 py-3 text-xs shadow-lg ring-1 ring-gray-200 backdrop-blur">
-          {#if isSaving}
-            <span class="text-yellow-600">Сохранение...</span>
-          {:else}
-            <span class="text-green-600">Сохранено</span>
-          {/if}
-        </div>
         <button
           type="button"
-          class="rounded-xl bg-white/95 px-4 py-3 text-sm font-medium text-gray-700 shadow-lg ring-1 ring-gray-200 backdrop-blur hover:bg-white"
+          class="glass-panel border-transparent px-4 py-3 text-sm font-medium text-gray-700 ring-0 hover:bg-white/90"
           aria-expanded={isPaletteOpen}
           onclick={() => (isPaletteOpen = !isPaletteOpen)}
         >
@@ -787,8 +780,8 @@
     </div>
 
     {#if isPaletteOpen}
-      <aside class="absolute bottom-4 right-4 top-28 z-20 flex w-[22rem] max-w-[calc(100vw-2rem)] flex-col rounded-2xl bg-white/95 shadow-2xl ring-1 ring-gray-200 backdrop-blur">
-        <div class="flex items-center justify-between gap-3 border-b border-gray-200 px-4 py-3">
+      <aside class="glass-panel absolute bottom-20 right-4 top-28 z-20 flex w-[22rem] max-w-[calc(100vw-2rem)] flex-col border-transparent ring-0">
+        <div class="flex items-center justify-between gap-3 border-b border-violet-100/25 px-4 py-3">
           <h2 class="text-sm font-bold uppercase tracking-wider text-gray-700">Палитра {getThreadPaletteLabel()}</h2>
           <button
             type="button"
@@ -813,7 +806,7 @@
                 href={getOzonSearchUrl(color)}
                 target="_blank"
                 rel="noopener noreferrer"
-                class="shrink-0 rounded bg-indigo-50 px-2 py-1 text-xs font-medium text-indigo-700 hover:bg-indigo-100"
+                class="shrink-0 rounded-lg bg-white/35 px-2 py-1 text-xs font-medium text-violet-700 ring-1 ring-violet-100/80 hover:bg-white/60"
               >
                 Купить
               </a>
@@ -823,24 +816,32 @@
       </aside>
     {/if}
 
-    <div class="absolute bottom-4 left-4 z-20 flex items-center gap-2 rounded-xl bg-white/95 p-2 text-xs shadow-lg ring-1 ring-gray-200 backdrop-blur">
+    <div class="glass-panel absolute bottom-4 right-4 z-20 border-transparent px-3 py-3 text-xs ring-0">
+      {#if isSaving}
+        <span class="text-yellow-600">Сохранение...</span>
+      {:else}
+        <span class="text-green-600">Сохранено</span>
+      {/if}
+    </div>
+
+    <div class="glass-panel absolute bottom-4 left-4 z-20 flex items-center gap-2 border-transparent p-2 text-xs ring-0">
       <button
         type="button"
-        class="rounded bg-indigo-50 px-3 py-2 font-medium text-indigo-700 hover:bg-indigo-100"
+        class="rounded-lg bg-white/35 px-3 py-2 font-medium text-violet-700 ring-1 ring-violet-100/80 hover:bg-white/60"
         onclick={() => zoomFromCenter(1.2)}
       >
         +
       </button>
       <button
         type="button"
-        class="rounded bg-indigo-50 px-3 py-2 font-medium text-indigo-700 hover:bg-indigo-100"
+        class="rounded-lg bg-white/35 px-3 py-2 font-medium text-violet-700 ring-1 ring-violet-100/80 hover:bg-white/60"
         onclick={() => zoomFromCenter(0.8)}
       >
         -
       </button>
       <button
         type="button"
-        class="rounded bg-gray-100 px-3 py-2 font-medium text-gray-700 hover:bg-gray-200"
+        class="rounded-lg bg-white/30 px-3 py-2 font-medium text-gray-700 ring-1 ring-white/50 hover:bg-white/55"
         onclick={resetView}
       >
         Сброс

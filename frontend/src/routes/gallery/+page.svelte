@@ -48,26 +48,29 @@
   <title>Галерея схем - CrossStitch</title>
 </svelte:head>
 
-<div class="max-w-7xl mx-auto">
-  <div class="flex justify-between items-center mb-6">
-    <h1 class="text-2xl font-bold text-gray-900">Ваши схемы</h1>
-    <a href="/" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-md text-sm font-medium">Новая схема</a>
+<div class="mx-auto max-w-7xl">
+  <div class="mb-8 flex items-center justify-between gap-4">
+    <div>
+      <h1 class="text-3xl font-bold tracking-tight text-gray-950">Ваши схемы</h1>
+      <p class="mt-2 text-sm text-gray-600">Коллекция созданных схем для вышивки.</p>
+    </div>
+    <a href="/" class="glass-button-primary">Новая схема</a>
   </div>
 
   {#if isLoading}
-    <div class="flex justify-center py-12">
-      <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
+    <div class="glass-panel flex justify-center py-12">
+      <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-violet-500"></div>
     </div>
   {:else if error}
-    <div class="bg-red-50 text-red-700 p-4 rounded-md">
+    <div class="rounded-2xl border border-red-100 bg-red-50/80 p-4 text-red-700 shadow-sm backdrop-blur-xl">
       Ошибка при загрузке галереи: {error}
     </div>
   {:else}
     {#if patterns && patterns.length > 0}
       <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
         {#each patterns as pattern}
-          <div class="bg-white rounded-lg shadow overflow-hidden flex flex-col">
-            <div class="aspect-w-1 aspect-h-1 w-full bg-gray-200">
+          <div class="glass-card flex flex-col overflow-hidden transition hover:-translate-y-0.5 hover:bg-white/55">
+            <div class="aspect-w-1 aspect-h-1 w-full bg-white/20">
               <!-- Using the pattern image path as preview -->
               <img src={api.getImageUrl(pattern.patternImagePath)} alt="Preview" class="w-full h-48 object-cover" />
             </div>
@@ -81,14 +84,14 @@
                 </p>
               </div>
               <div class="flex items-center gap-2">
-                <a href={`/workspace/${pattern.id}`} class="flex-1 text-center bg-indigo-50 text-indigo-700 hover:bg-indigo-100 py-2 rounded-md text-sm font-medium transition-colors">
+                <a href={`/workspace/${pattern.id}`} class="glass-button-soft flex-1">
                   Вышивать
                 </a>
                 <button
                   type="button"
                   onclick={() => deletePattern(pattern.id)}
                   disabled={deletingPatternId === pattern.id}
-                  class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-red-50 text-red-700 transition-colors hover:bg-red-100 disabled:bg-gray-100 disabled:text-gray-400"
+                  class="glass-button-danger h-9 w-9 shrink-0"
                   aria-label="Удалить схему"
                 >
                   <svg class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
@@ -101,9 +104,9 @@
         {/each}
       </div>
     {:else}
-      <div class="text-center py-12 bg-white rounded-lg shadow">
+      <div class="glass-card py-12 text-center">
         <p class="text-gray-500 mb-4">У вас пока нет сохраненных схем</p>
-        <a href="/" class="text-indigo-600 hover:text-indigo-500 font-medium">Создать первую схему &rarr;</a>
+        <a href="/" class="font-medium text-violet-600 hover:text-violet-500">Создать первую схему &rarr;</a>
       </div>
     {/if}
   {/if}

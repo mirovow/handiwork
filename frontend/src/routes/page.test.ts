@@ -33,6 +33,12 @@ describe('new pattern page', () => {
 		expect((screen.getByLabelText('Количество цветов') as HTMLInputElement).value).toBe('10');
 	});
 
+	it('links to the gallery', () => {
+		render(Page);
+
+		expect(screen.getByRole('link', { name: '← В галерею' }).getAttribute('href')).toBe('/gallery');
+	});
+
 	it('shows an image preview after upload', async () => {
 		render(Page);
 
