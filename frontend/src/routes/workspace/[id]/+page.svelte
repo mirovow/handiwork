@@ -85,6 +85,13 @@
     const color = pattern.palette.find((c: any) => (c.code ?? c.name) === threadCode);
     return color ? color.hex : '#ffffff';
   }
+
+  function getOzonSearchUrl(color: any) {
+    const manufacturer = color.manufacturer || pattern.settings.threadPalette || 'DMC';
+    const code = color.code ?? color.name;
+    const query = `нитки мулине ${manufacturer} ${code} вышивка крестом`;
+    return `https://www.ozon.ru/search/?text=${encodeURIComponent(query)}`;
+  }
 </script>
 
 <svelte:head>
@@ -133,12 +140,22 @@
         <h2 class="text-sm font-bold text-gray-700 uppercase tracking-wider mb-4">Палитра {getThreadPaletteLabel()}</h2>
         <ul class="space-y-2">
           {#each pattern.palette as color}
-            <li class="flex items-center space-x-3 text-sm">
-              <span class="w-6 h-6 rounded-full border border-gray-300 shadow-sm" style="background-color: {color.hex}"></span>
-              <span>
-                <span class="font-mono">{color.code ?? color.name}</span>
-                <span class="block text-xs text-gray-500">{color.name}</span>
+            <li class="flex items-center justify-between gap-3 text-sm">
+              <span class="flex items-center min-w-0 gap-3">
+                <span class="w-6 h-6 rounded-full border border-gray-300 shadow-sm shrink-0" style="background-color: {color.hex}"></span>
+                <span class="min-w-0">
+                  <span class="font-mono">{color.code ?? color.name}</span>
+                  <span class="block text-xs text-gray-500 truncate">{color.name}</span>
+                </span>
               </span>
+              <a
+                href={getOzonSearchUrl(color)}
+                target="_blank"
+                rel="noopener noreferrer"
+                class="shrink-0 rounded bg-indigo-50 px-2 py-1 text-xs font-medium text-indigo-700 hover:bg-indigo-100"
+              >
+                Купить
+              </a>
             </li>
           {/each}
         </ul>
