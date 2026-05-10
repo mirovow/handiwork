@@ -1,13 +1,33 @@
 <script lang="ts">
   import { api } from '$lib/api';
   import { goto } from '$app/navigation';
+  import { onMount } from 'svelte';
+
+  type ThreadPalette = {
+    id: string;
+    label: string;
+  };
 
   let file: File | null = $state(null);
   let width = $state(100);
   let height = $state(100);
   let maxColors = $state(30);
+  let threadPalette = $state('DMC');
+  let threadPalettes = $state<ThreadPalette[]>([{ id: 'DMC', label: 'DMC' }]);
   let isUploading = $state(false);
   let error = $state('');
+
+  onMount(async () => {
+    try {
+      const palettes = await api.getThreadPalettes();
+      if (Array.isArray(palettes) && palettes.length > 0) {
+        threadPalettes = palettes;
+        threadPalette = palettes[0].id;
+      }
+    } catch (e) {
+      console.error('Failed to load thread palettes', e);
+    }
+  });
 
   function handleFileChange(event: Event) {
     const input = event.target as HTMLInputElement;
@@ -25,7 +45,7 @@
     try {
       isUploading = true;
       error = '';
-      const result = await api.uploadImage(file, width, height, maxColors);
+      const result = await api.uploadImage(file, width, height, maxColors, threadPalette);
       if (result && result.id) {
         goto(`/workspace/${result.id}`);
       } else {
@@ -89,6 +109,16 @@
       <label for="max-colors" class="block text-sm font-medium text-gray-700">Количество цветов</label>
       <input type="number" id="max-colors" bind:value={maxColors} min="2" max="100" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
       <p class="mt-1 text-xs text-gray-500">Меньше цветов — проще схема, больше цветов — точнее изображение.</p>
+    </div>
+
+    <div>
+      <label for="thread-palette" class="block text-sm font-medium text-gray-700">Палитра ниток</label>
+      <select id="thread-palette" bind:value={threadPalette} class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 bg-white focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+        {#each threadPalettes as palette}
+          <option value={palette.id}>{palette.label}</option>
+        {/each}
+      </select>
+      <p class="mt-1 text-xs text-gray-500">Выбранная палитра влияет на итоговые цвета схемы.</p>
     </div>
 
     <div class="pt-4">

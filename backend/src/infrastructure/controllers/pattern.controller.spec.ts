@@ -30,14 +30,14 @@ describe('PatternController', () => {
 
   it('rejects a missing image file', async () => {
     await expect(
-      controller.createPattern(undefined as unknown as Express.Multer.File, '100', '100', '30'),
+      controller.createPattern(undefined as unknown as Express.Multer.File, '100', '100', '30', 'DMC'),
     ).rejects.toThrow(BadRequestException);
   });
 
   it('rejects unsupported image MIME types', async () => {
     const file = { ...validFile, mimetype: 'image/gif' } as Express.Multer.File;
 
-    await expect(controller.createPattern(file, '100', '100', '30')).rejects.toThrow(
+    await expect(controller.createPattern(file, '100', '100', '30', 'DMC')).rejects.toThrow(
       BadRequestException,
     );
   });
@@ -50,34 +50,49 @@ describe('PatternController', () => {
     ['100', '9'],
     ['100', '501'],
   ])('rejects invalid pattern dimensions %s x %s', async (width, height) => {
-    await expect(controller.createPattern(validFile, width, height, '30')).rejects.toThrow(
+    await expect(controller.createPattern(validFile, width, height, '30', 'DMC')).rejects.toThrow(
       BadRequestException,
     );
   });
 
   it.each(['abc', '1', '101'])('rejects invalid max colors %s', async (maxColors) => {
     await expect(
-      controller.createPattern(validFile, '100', '100', maxColors),
+      controller.createPattern(validFile, '100', '100', maxColors, 'DMC'),
     ).rejects.toThrow(BadRequestException);
   });
 
+  it('rejects unknown thread palettes', async () => {
+    await expect(
+      controller.createPattern(validFile, '100', '100', '30', 'UNKNOWN'),
+    ).rejects.toThrow(BadRequestException);
+  });
+
+  it('returns available thread palettes', () => {
+    expect(controller.getThreadPalettes()).toEqual([
+      { id: 'DMC', label: 'DMC' },
+      { id: 'ANCHOR', label: 'Anchor' },
+    ]);
+  });
+
   it('uses the default max colors when it is omitted', async () => {
-    await controller.createPattern(validFile, '120', '80', undefined);
+    await controller.createPattern(validFile, '120', '80', undefined, undefined);
 
     expect(generatePatternUseCase.execute).toHaveBeenCalledWith('uploads/source.png', {
       width: 120,
       height: 80,
       maxColors: 30,
+      threadPalette: 'DMC',
     });
   });
 
   it('passes validated dimensions and file path to the use case', async () => {
-    await controller.createPattern(validFile, '120', '80', '24');
+    await controller.createPattern(validFile, '120', '80', '24', 'ANCHOR');
 
     expect(generatePatternUseCase.execute).toHaveBeenCalledWith('uploads/source.png', {
       width: 120,
       height: 80,
       maxColors: 24,
+      threadPalette: 'ANCHOR',
     });
   });
 });

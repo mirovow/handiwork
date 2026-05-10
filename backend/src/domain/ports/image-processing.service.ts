@@ -7,8 +7,15 @@ export interface IImageProcessingService {
     width: number,
     height: number,
     maxColors: number,
+    threadPalette: string,
   ): Promise<{
     patternData: string[][];
-    palette: Array<{ name: string; rgb: [number, number, number]; hex: string }>;
+    palette: Array<{
+      manufacturer: string;
+      code: string;
+      name: string;
+      rgb: [number, number, number];
+      hex: string;
+    }>;
   }>;
 }

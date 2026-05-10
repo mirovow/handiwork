@@ -34,9 +34,33 @@ describe('SharpImageProcessingService', () => {
     }).png().toFile(inputPath);
 
     const service = new SharpImageProcessingService();
-    const result = await service.processImage(inputPath, outputPath, 4, 1, 2);
+    const result = await service.processImage(inputPath, outputPath, 4, 1, 2, 'DMC');
 
     expect(result.palette).toHaveLength(2);
     expect(new Set(result.patternData.flat())).toHaveProperty('size', 2);
+  });
+
+  it('uses the requested thread palette for generated colors', async () => {
+    const inputPath = join(tempDir, 'anchor-input.png');
+    const outputPath = join(tempDir, 'anchor-output.png');
+
+    await sharp(Buffer.from([255, 255, 255]), {
+      raw: {
+        width: 1,
+        height: 1,
+        channels: 3,
+      },
+    }).png().toFile(inputPath);
+
+    const service = new SharpImageProcessingService();
+    const result = await service.processImage(inputPath, outputPath, 1, 1, 10, 'ANCHOR');
+
+    expect(result.patternData).toEqual([['00001']]);
+    expect(result.palette).toEqual([
+      expect.objectContaining({
+        manufacturer: 'ANCHOR',
+        code: '00001',
+      }),
+    ]);
   });
 });

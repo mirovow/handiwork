@@ -75,10 +75,14 @@
     }, 1000); // 1 second debounce
   }
 
-  // Get color hex for a given DMC name
-  function getColorHex(dmcName: string) {
-    if (dmcName === 'EMPTY') return 'transparent';
-    const color = pattern.palette.find((c: any) => c.name === dmcName);
+  function getThreadPaletteLabel() {
+    return pattern.settings.threadPalette || pattern.palette[0]?.manufacturer || 'DMC';
+  }
+
+  // Get color hex for a given thread code
+  function getColorHex(threadCode: string) {
+    if (threadCode === 'EMPTY') return 'transparent';
+    const color = pattern.palette.find((c: any) => (c.code ?? c.name) === threadCode);
     return color ? color.hex : '#ffffff';
   }
 </script>
@@ -126,12 +130,15 @@
       
       <!-- Palette Sidebar -->
       <div class="w-64 bg-white border-r border-gray-200 overflow-y-auto p-4 hidden md:block">
-        <h2 class="text-sm font-bold text-gray-700 uppercase tracking-wider mb-4">Палитра DMC</h2>
+        <h2 class="text-sm font-bold text-gray-700 uppercase tracking-wider mb-4">Палитра {getThreadPaletteLabel()}</h2>
         <ul class="space-y-2">
           {#each pattern.palette as color}
             <li class="flex items-center space-x-3 text-sm">
               <span class="w-6 h-6 rounded-full border border-gray-300 shadow-sm" style="background-color: {color.hex}"></span>
-              <span class="font-mono">{color.name}</span>
+              <span>
+                <span class="font-mono">{color.code ?? color.name}</span>
+                <span class="block text-xs text-gray-500">{color.name}</span>
+              </span>
             </li>
           {/each}
         </ul>

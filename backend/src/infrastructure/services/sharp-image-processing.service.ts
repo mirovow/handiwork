@@ -1,13 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import sharp from 'sharp';
 import { IImageProcessingService } from '../../domain/ports/image-processing.service';
-import { findNearestDMC } from '../utils/dmc-palette';
-
-type DmcColor = {
-  name: string;
-  hex: string;
-  rgb: [number, number, number];
-};
+import {
+  getThreadPalette,
+  isThreadPaletteId,
+  type ThreadColor,
+} from '../utils/thread-palettes';
 
 @Injectable()
 export class SharpImageProcessingService implements IImageProcessingService {
@@ -17,7 +15,13 @@ export class SharpImageProcessingService implements IImageProcessingService {
     width: number,
     height: number,
     maxColors: number,
+    threadPalette: string,
   ) {
+    if (!isThreadPaletteId(threadPalette)) {
+      throw new Error(`Unknown thread palette: ${threadPalette}`);
+    }
+
+    const sourcePalette = getThreadPalette(threadPalette);
     const rawImage = await sharp(inputPath)
       .resize(width, height, {
         fit: 'contain',
@@ -28,7 +32,7 @@ export class SharpImageProcessingService implements IImageProcessingService {
 
     const { data, info } = rawImage;
     const initialPatternData: string[][] = [];
-    const paletteStats = new Map<string, { color: DmcColor; count: number }>();
+    const paletteStats = new Map<string, { color: ThreadColor; count: number }>();
 
     for (let y = 0; y < info.height; y++) {
       const row: string[] = [];
@@ -45,12 +49,12 @@ export class SharpImageProcessingService implements IImageProcessingService {
           continue;
         }
 
-        const nearestDmc = findNearestDMC(r, g, b);
-        row.push(nearestDmc.name);
+        const nearestThreadColor = this.findNearestColor({ rgb: [r, g, b] }, sourcePalette);
+        row.push(nearestThreadColor.code);
 
-        const existingStat = paletteStats.get(nearestDmc.name);
-        paletteStats.set(nearestDmc.name, {
-          color: nearestDmc as DmcColor,
+        const existingStat = paletteStats.get(nearestThreadColor.code);
+        paletteStats.set(nearestThreadColor.code, {
+          color: nearestThreadColor,
           count: (existingStat?.count ?? 0) + 1,
         });
       }
@@ -62,60 +66,60 @@ export class SharpImageProcessingService implements IImageProcessingService {
       .slice(0, maxColors)
       .map((entry) => entry.color);
     const colorsByName = new Map(
-      Array.from(paletteStats.values()).map((entry) => [entry.color.name, entry.color]),
+      Array.from(paletteStats.values()).map((entry) => [entry.color.code, entry.color]),
     );
-    const limitedPaletteByName = new Map(limitedPalette.map((color) => [color.name, color]));
+    const limitedPaletteByCode = new Map(limitedPalette.map((color) => [color.code, color]));
     const patternData = initialPatternData.map((row) =>
-      row.map((dmcName) => {
-        if (dmcName === 'EMPTY' || limitedPaletteByName.has(dmcName)) {
-          return dmcName;
+      row.map((threadCode) => {
+        if (threadCode === 'EMPTY' || limitedPaletteByCode.has(threadCode)) {
+          return threadCode;
         }
 
-        const sourceColor = colorsByName.get(dmcName);
+        const sourceColor = colorsByName.get(threadCode);
         if (!sourceColor) {
           return 'EMPTY';
         }
 
-        return this.findNearestColor(sourceColor, limitedPalette).name;
+        return this.findNearestColor(sourceColor, limitedPalette).code;
       }),
     );
-    const usedPaletteMap = new Map<string, DmcColor>();
+    const usedPaletteMap = new Map<string, ThreadColor>();
     for (const row of patternData) {
-      for (const dmcName of row) {
-        if (dmcName === 'EMPTY') {
+      for (const threadCode of row) {
+        if (threadCode === 'EMPTY') {
           continue;
         }
 
-        const color = limitedPaletteByName.get(dmcName);
+        const color = limitedPaletteByCode.get(threadCode);
         if (color) {
-          usedPaletteMap.set(dmcName, color);
+          usedPaletteMap.set(threadCode, color);
         }
       }
     }
 
-    // Generate preview image using the mapped DMC colors
+    // Generate preview image using the mapped thread colors.
     const outputData = Buffer.alloc(info.width * info.height * 3);
     for (let y = 0; y < info.height; y++) {
       for (let x = 0; x < info.width; x++) {
-        const dmcName = patternData[y][x];
+        const threadCode = patternData[y][x];
         const offset = (y * info.width + x) * 3;
         
-        if (dmcName === 'EMPTY') {
+        if (threadCode === 'EMPTY') {
           outputData[offset] = 255;
           outputData[offset + 1] = 255;
           outputData[offset + 2] = 255;
         } else {
-          const dmcColor = usedPaletteMap.get(dmcName);
-          if (!dmcColor) {
+          const threadColor = usedPaletteMap.get(threadCode);
+          if (!threadColor) {
             outputData[offset] = 255;
             outputData[offset + 1] = 255;
             outputData[offset + 2] = 255;
             continue;
           }
 
-          outputData[offset] = dmcColor.rgb[0];
-          outputData[offset + 1] = dmcColor.rgb[1];
-          outputData[offset + 2] = dmcColor.rgb[2];
+          outputData[offset] = threadColor.rgb[0];
+          outputData[offset + 1] = threadColor.rgb[1];
+          outputData[offset + 2] = threadColor.rgb[2];
         }
       }
     }
@@ -134,7 +138,10 @@ export class SharpImageProcessingService implements IImageProcessingService {
     };
   }
 
-  private findNearestColor(sourceColor: DmcColor, palette: DmcColor[]): DmcColor {
+  private findNearestColor(
+    sourceColor: { rgb: [number, number, number] },
+    palette: ThreadColor[],
+  ): ThreadColor {
     let minDistance = Infinity;
     let nearestColor = palette[0];
 

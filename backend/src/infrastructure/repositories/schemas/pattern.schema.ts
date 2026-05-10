@@ -19,10 +19,17 @@ export class PatternModel {
     width: number;
     height: number;
     maxColors: number;
+    threadPalette: string;
   };
 
   @Prop({ type: Array })
-  palette: Array<{ name: string; rgb: [number, number, number]; hex: string }>;
+  palette: Array<{
+    manufacturer: string;
+    code: string;
+    name: string;
+    rgb: [number, number, number];
+    hex: string;
+  }>;
 
   @Prop({ type: [[String]] })
   patternData: string[][];

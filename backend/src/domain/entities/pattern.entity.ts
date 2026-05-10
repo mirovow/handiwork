@@ -6,8 +6,11 @@ export class Pattern {
     width: number;
     height: number;
     maxColors: number;
+    threadPalette: string;
   };
   palette: Array<{
+    manufacturer: string;
+    code: string;
     name: string;
     rgb: [number, number, number];
     hex: string;

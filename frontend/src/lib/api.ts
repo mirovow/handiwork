@@ -1,12 +1,19 @@
 const API_URL = (import.meta.env.VITE_API_URL || 'http://localhost:3000').replace(/\/$/, '');
 
 export const api = {
-  uploadImage: async (file: File, width: number, height: number, maxColors: number) => {
+  uploadImage: async (
+    file: File,
+    width: number,
+    height: number,
+    maxColors: number,
+    threadPalette: string,
+  ) => {
     const formData = new FormData();
     formData.append('image', file);
     formData.append('width', width.toString());
     formData.append('height', height.toString());
     formData.append('maxColors', maxColors.toString());
+    formData.append('threadPalette', threadPalette);
 
     const res = await fetch(`${API_URL}/patterns`, {
       method: 'POST',
@@ -17,6 +24,11 @@ export const api = {
 
   getPatterns: async () => {
     const res = await fetch(`${API_URL}/patterns`);
+    return res.json();
+  },
+
+  getThreadPalettes: async () => {
+    const res = await fetch(`${API_URL}/patterns/thread-palettes`);
     return res.json();
   },
 

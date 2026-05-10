@@ -19,7 +19,7 @@ export class GeneratePatternUseCase {
 
   async execute(
     inputImagePath: string,
-    settings: { width: number; height: number; maxColors: number },
+    settings: { width: number; height: number; maxColors: number; threadPalette: string },
   ): Promise<Pattern> {
     const id = randomUUID();
     const patternFileName = `pattern_${id}.png`;
@@ -32,6 +32,7 @@ export class GeneratePatternUseCase {
       settings.width,
       settings.height,
       settings.maxColors,
+      settings.threadPalette,
     );
 
     const pattern = new Pattern({

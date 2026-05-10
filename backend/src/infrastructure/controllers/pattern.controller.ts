@@ -19,6 +19,11 @@ import {
   getBackendConfig,
   getUploadsPath,
 } from '../config/app.config';
+import {
+  getAvailableThreadPalettes,
+  isThreadPaletteId,
+  type ThreadPaletteId,
+} from '../utils/thread-palettes';
 
 const backendConfig = getBackendConfig();
 const uploadsPath = getUploadsPath(backendConfig);
@@ -26,6 +31,7 @@ const allowedImageMimeTypes = new Set(['image/png', 'image/jpeg']);
 const defaultMaxColors = 30;
 const minMaxColors = 2;
 const maxMaxColors = 100;
+const defaultThreadPalette: ThreadPaletteId = 'DMC';
 ensureUploadsDirectory(uploadsPath);
 
 @Controller('patterns')
@@ -63,15 +69,22 @@ export class PatternController {
     @Body('width') width: string,
     @Body('height') height: string,
     @Body('maxColors') maxColors: string | undefined,
+    @Body('threadPalette') threadPalette: string | undefined,
   ) {
     this.validateImageFile(file);
-    const settings = this.parsePatternSettings(width, height, maxColors);
+    const settings = this.parsePatternSettings(width, height, maxColors, threadPalette);
 
     return this.generatePatternUseCase.execute(file.path, {
       width: settings.width,
       height: settings.height,
       maxColors: settings.maxColors,
+      threadPalette: settings.threadPalette,
     });
+  }
+
+  @Get('thread-palettes')
+  getThreadPalettes() {
+    return getAvailableThreadPalettes();
   }
 
   @Get()
@@ -102,11 +115,13 @@ export class PatternController {
     width: string,
     height: string,
     maxColors: string | undefined,
-  ): { width: number; height: number; maxColors: number } {
+    threadPalette: string | undefined,
+  ): { width: number; height: number; maxColors: number; threadPalette: ThreadPaletteId } {
     return {
       width: this.parsePatternDimension('width', width),
       height: this.parsePatternDimension('height', height),
       maxColors: this.parseMaxColors(maxColors),
+      threadPalette: this.parseThreadPalette(threadPalette),
     };
   }
 
@@ -144,5 +159,17 @@ export class PatternController {
     }
 
     return parsed;
+  }
+
+  private parseThreadPalette(value: string | undefined): ThreadPaletteId {
+    if (value === undefined || value === '') {
+      return defaultThreadPalette;
+    }
+
+    if (!isThreadPaletteId(value)) {
+      throw new BadRequestException('Unknown thread palette');
+    }
+
+    return value;
   }
 }
