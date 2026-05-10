@@ -61,4 +61,12 @@ export class PatternMongoRepository implements IPatternRepository {
     if (!updated) return null;
     return new Pattern(updated.toObject());
   }
+
+  async delete(id: string): Promise<boolean> {
+    const deleted = await this.model.findOneAndDelete({ id }).exec();
+    if (!deleted) return false;
+
+    await this.progressModel.deleteMany({ patternId: id }).exec();
+    return true;
+  }
 }

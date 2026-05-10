@@ -13,8 +13,10 @@ import { SharpImageProcessingService } from './infrastructure/services/sharp-ima
 
 import { GeneratePatternUseCase } from './application/use-cases/generate-pattern.use-case';
 import { GetPatternsUseCase } from './application/use-cases/get-patterns.use-case';
+import { DeletePatternUseCase } from './application/use-cases/delete-pattern.use-case';
 import { TrackProgressUseCase } from './application/use-cases/track-progress.use-case';
 import { GetProgressUseCase } from './application/use-cases/get-progress.use-case';
+import { AddProgressTimeUseCase } from './application/use-cases/add-progress-time.use-case';
 
 import { PatternController } from './infrastructure/controllers/pattern.controller';
 import { ProgressController } from './infrastructure/controllers/progress.controller';
@@ -73,8 +75,10 @@ ensureUploadsDirectory(uploadsPath);
       inject: [PATTERN_REPOSITORY, IMAGE_PROCESSING_SERVICE],
     },
     GetPatternsUseCase,
+    DeletePatternUseCase,
     TrackProgressUseCase,
     GetProgressUseCase,
+    AddProgressTimeUseCase,
   ],
 })
 export class AppModule {}

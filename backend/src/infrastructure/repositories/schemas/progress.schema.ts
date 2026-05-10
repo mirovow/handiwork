@@ -13,6 +13,9 @@ export class ProgressModel {
 
   @Prop({ type: [{ stitchId: String, completedAt: String }], default: [] })
   completedStitches: Array<{ stitchId: string; completedAt?: string }>;
+
+  @Prop({ default: 0 })
+  elapsedSeconds: number;
 }
 
 export const ProgressSchema = SchemaFactory.createForClass(ProgressModel);

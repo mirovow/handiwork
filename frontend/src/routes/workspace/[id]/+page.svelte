@@ -2,6 +2,8 @@
   import { page } from '$app/stores';
   import { api, type CompletedStitch } from '$lib/api';
   import { calculateProgressPercent, countTotalStitches } from '$lib/progress';
+  import { buildThreadPurchaseUrl, getCellThreadColor, type ThreadColor } from '$lib/thread-color';
+  import { formatElapsedTime } from '$lib/time';
   import { tick } from 'svelte';
   import { onMount } from 'svelte';
 
@@ -26,12 +28,15 @@
   let loading = $state(true);
   
   let completedStitchIds = $state(new Set<string>());
+  let persistedElapsedSeconds = $state(0);
+  let sessionElapsedSeconds = $state(0);
   let canvas = $state<HTMLCanvasElement>();
   let canvasContainer = $state<HTMLDivElement>();
   let viewScale = $state(1);
   let offsetX = $state(24);
   let offsetY = $state(24);
   let hoveredCell = $state<{ x: number; y: number } | null>(null);
+  let threadTooltipCell = $state<{ x: number; y: number } | null>(null);
   let isPaletteOpen = $state(false);
   let isPanning = false;
   let didPan = false;
@@ -44,11 +49,18 @@
   const minScale = 0.2;
   const maxScale = 6;
   const maxStaticLayerPixels = 16_000_000;
+  const timeFlushIntervalSeconds = 1;
   const totalStitches = $derived(countTotalStitches(pattern));
   const progressPercent = $derived(calculateProgressPercent(completedStitchIds.size, totalStitches));
+  const totalElapsedSeconds = $derived(persistedElapsedSeconds + sessionElapsedSeconds);
+  const tooltipPatternCell = $derived(threadTooltipCell ? getCellAt(threadTooltipCell.x, threadTooltipCell.y) : null);
+  const tooltipThreadColor = $derived(getCellThreadColor(tooltipPatternCell, pattern?.palette ?? []));
   
   // Debounce saving
   let saveTimeout: ReturnType<typeof setTimeout> | null = null;
+  let timerInterval: ReturnType<typeof setInterval> | null = null;
+  let sessionStartedAt = 0;
+  let persistedSessionSeconds = 0;
   let isSaving = $state(false);
 
   onMount(() => {
@@ -62,6 +74,14 @@
         ]);
         pattern = patternData;
         progress = progressData;
+        const backendElapsedSeconds = progress?.elapsedSeconds ?? 0;
+        const storedElapsedSeconds = readStoredElapsedSeconds();
+        persistedElapsedSeconds = Math.max(backendElapsedSeconds, storedElapsedSeconds);
+        if (storedElapsedSeconds > backendElapsedSeconds) {
+          void api.addProgressTime(patternId, storedElapsedSeconds - backendElapsedSeconds).catch((e) => {
+            console.error('Failed to sync locally stored stitching time', e);
+          });
+        }
         
         if (progress && progress.completedStitches) {
           const newSet = new Set<string>();
@@ -79,13 +99,24 @@
           resizeObserver.observe(canvasContainer);
         }
         resetView();
+        if (pattern?.schemaVersion === 2) {
+          startSessionTimer();
+        }
       }
     }
 
     void loadWorkspace();
+    window.addEventListener('beforeunload', persistSessionTimeOnUnload);
+    window.addEventListener('pagehide', persistSessionTimeOnUnload);
 
     return () => {
+      persistSessionTimeOnUnload();
+      window.removeEventListener('beforeunload', persistSessionTimeOnUnload);
+      window.removeEventListener('pagehide', persistSessionTimeOnUnload);
       resizeObserver.disconnect();
+      if (timerInterval) {
+        clearInterval(timerInterval);
+      }
       if (animationFrameId !== null) {
         cancelAnimationFrame(animationFrameId);
       }
@@ -99,6 +130,7 @@
     offsetX;
     offsetY;
     hoveredCell;
+    threadTooltipCell;
     scheduleDraw();
   });
 
@@ -139,6 +171,69 @@
     }, 1000); // 1 second debounce
   }
 
+  function startSessionTimer() {
+    sessionStartedAt = Date.now();
+    persistedSessionSeconds = 0;
+    sessionElapsedSeconds = 0;
+    if (timerInterval) clearInterval(timerInterval);
+
+    timerInterval = setInterval(() => {
+      sessionElapsedSeconds = Math.floor((Date.now() - sessionStartedAt) / 1000);
+      writeStoredElapsedSeconds(persistedElapsedSeconds + sessionElapsedSeconds);
+      if (getUnpersistedSessionSeconds() >= timeFlushIntervalSeconds) {
+        void persistSessionTime();
+      }
+    }, 1000);
+  }
+
+  function getUnpersistedSessionSeconds() {
+    if (!sessionStartedAt) return 0;
+
+    const currentSessionSeconds = Math.floor((Date.now() - sessionStartedAt) / 1000);
+    return Math.max(0, currentSessionSeconds - persistedSessionSeconds);
+  }
+
+  async function persistSessionTime() {
+    const elapsedSeconds = getUnpersistedSessionSeconds();
+    if (elapsedSeconds <= 0) return;
+
+    persistedSessionSeconds += elapsedSeconds;
+    try {
+      await api.addProgressTime(patternId, elapsedSeconds);
+    } catch (e) {
+      persistedSessionSeconds -= elapsedSeconds;
+      console.error('Failed to save stitching time', e);
+    }
+  }
+
+  function persistSessionTimeOnUnload() {
+    const elapsedSeconds = getUnpersistedSessionSeconds();
+    if (elapsedSeconds <= 0) return;
+
+    persistedSessionSeconds += elapsedSeconds;
+    writeStoredElapsedSeconds(persistedElapsedSeconds + persistedSessionSeconds);
+    if (!api.sendProgressTime(patternId, elapsedSeconds)) {
+      void api.addProgressTime(patternId, elapsedSeconds, true).catch((e) => {
+        console.error('Failed to save stitching time', e);
+      });
+    }
+  }
+
+  function getElapsedStorageKey() {
+    return `crossstitch:${patternId}:elapsedSeconds`;
+  }
+
+  function readStoredElapsedSeconds() {
+    const storedValue = window.localStorage.getItem(getElapsedStorageKey());
+    const parsedValue = Number(storedValue);
+
+    return Number.isFinite(parsedValue) && parsedValue > 0 ? Math.floor(parsedValue) : 0;
+  }
+
+  function writeStoredElapsedSeconds(elapsedSeconds: number) {
+    window.localStorage.setItem(getElapsedStorageKey(), Math.max(0, Math.floor(elapsedSeconds)).toString());
+  }
+
   function getThreadPaletteLabel() {
     return pattern.settings.threadPalette || pattern.palette[0]?.manufacturer || 'DMC';
   }
@@ -150,7 +245,7 @@
   function getColorHex(cell: PatternCell) {
     const threadCode = getCellThreadCode(cell);
     if (!threadCode) return 'transparent';
-    const color = pattern.palette.find((c: any) => (c.code ?? c.name) === threadCode);
+    const color = getCellThreadColor(cell, pattern.palette);
     return color ? color.hex : '#ffffff';
   }
 
@@ -171,11 +266,8 @@
     return stitch ? completedStitchIds.has(stitch.id) : false;
   }
 
-  function getOzonSearchUrl(color: any) {
-    const manufacturer = color.manufacturer || pattern.settings.threadPalette || 'DMC';
-    const code = color.code ?? color.name;
-    const query = `нитки мулине ${manufacturer} ${code} вышивка крестом`;
-    return `https://www.ozon.ru/search/?text=${encodeURIComponent(query)}`;
+  function getOzonSearchUrl(color: ThreadColor) {
+    return buildThreadPurchaseUrl(color, pattern.settings.threadPalette);
   }
 
   function scheduleDraw() {
@@ -440,12 +532,13 @@
   }
 
   function drawHover(context: CanvasRenderingContext2D) {
-    if (!hoveredCell) return;
+    const highlightedCell = threadTooltipCell ?? hoveredCell;
+    if (!highlightedCell) return;
 
     context.save();
     context.strokeStyle = '#4f46e5';
     context.lineWidth = 2 / viewScale;
-    context.strokeRect(hoveredCell.x * cellSize, hoveredCell.y * cellSize, cellSize, cellSize);
+    context.strokeRect(highlightedCell.x * cellSize, highlightedCell.y * cellSize, cellSize, cellSize);
     context.restore();
   }
 
@@ -469,9 +562,27 @@
     return pattern.patternData[y]?.[x] ?? null;
   }
 
+  function getThreadTooltipStyle() {
+    if (!threadTooltipCell || !canvas) return '';
+
+    const rect = canvas.getBoundingClientRect();
+    const cellRight = offsetX + (threadTooltipCell.x + 1) * cellSize * viewScale;
+    const cellTop = offsetY + threadTooltipCell.y * cellSize * viewScale;
+    const preferredLeft = cellRight + 12;
+    const preferredTop = cellTop;
+    const maxLeft = Math.max(16, rect.width - 272);
+    const maxTop = Math.max(16, rect.height - 172);
+    const left = Math.min(Math.max(16, preferredLeft), maxLeft);
+    const top = Math.min(Math.max(16, preferredTop), maxTop);
+
+    return `left: ${left}px; top: ${top}px;`;
+  }
+
   function handlePointerDown(event: PointerEvent) {
     if (!canvas) return;
+    if (event.button !== 0) return;
 
+    threadTooltipCell = null;
     isPanning = true;
     didPan = false;
     panStart = { x: event.clientX, y: event.clientY, offsetX, offsetY };
@@ -510,6 +621,21 @@
   function handlePointerLeave() {
     hoveredCell = null;
     isPanning = false;
+  }
+
+  function handleContextMenu(event: MouseEvent) {
+    event.preventDefault();
+
+    const cellPosition = getCellFromPointer(event);
+    if (!cellPosition) {
+      threadTooltipCell = null;
+      return;
+    }
+
+    const cell = getCellAt(cellPosition.x, cellPosition.y);
+    const color = getCellThreadColor(cell, pattern?.palette ?? []);
+    threadTooltipCell = color ? cellPosition : null;
+    hoveredCell = cellPosition;
   }
 
   function handleWheel(event: WheelEvent) {
@@ -584,8 +710,46 @@
         onpointerup={handlePointerUp}
         onpointerleave={handlePointerLeave}
         onwheel={handleWheel}
+        oncontextmenu={handleContextMenu}
       ></canvas>
     </div>
+
+    {#if threadTooltipCell && tooltipThreadColor}
+      <div
+        class="absolute z-30 w-64 rounded-2xl bg-white/95 p-4 text-sm shadow-2xl ring-1 ring-gray-200 backdrop-blur"
+        style={getThreadTooltipStyle()}
+        role="tooltip"
+      >
+        <div class="flex items-start gap-3">
+          <span
+            class="mt-0.5 h-9 w-9 shrink-0 rounded-lg border border-gray-300 shadow-sm"
+            style="background-color: {tooltipThreadColor.hex}"
+          ></span>
+          <div class="min-w-0 flex-1">
+            <div class="truncate font-medium text-gray-900">{tooltipThreadColor.name}</div>
+            <div class="mt-1 font-mono text-xs text-gray-500">
+              {tooltipThreadColor.manufacturer || getThreadPaletteLabel()} {tooltipThreadColor.code ?? tooltipThreadColor.name}
+            </div>
+          </div>
+          <button
+            type="button"
+            class="rounded-md px-2 py-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+            aria-label="Закрыть подсказку"
+            onclick={() => (threadTooltipCell = null)}
+          >
+            X
+          </button>
+        </div>
+        <a
+          href={getOzonSearchUrl(tooltipThreadColor)}
+          target="_blank"
+          rel="noopener noreferrer"
+          class="mt-3 inline-flex w-full items-center justify-center rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-700"
+        >
+          Купить
+        </a>
+      </div>
+    {/if}
 
     <div class="pointer-events-none absolute left-4 right-4 top-4 z-20 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
       <div class="pointer-events-auto flex flex-wrap items-center gap-2 rounded-xl bg-white/95 p-2 text-sm shadow-lg ring-1 ring-gray-200 backdrop-blur">
@@ -602,6 +766,7 @@
         <div class="rounded-xl bg-white/95 px-4 py-3 text-sm shadow-lg ring-1 ring-gray-200 backdrop-blur">
           <div class="font-medium text-gray-900">Прогресс: {progressPercent}%</div>
           <div class="text-xs text-gray-500">{completedStitchIds.size} / {totalStitches} крестиков</div>
+          <div class="mt-1 text-xs text-gray-500">Время: {formatElapsedTime(totalElapsedSeconds)}</div>
         </div>
         <div class="rounded-xl bg-white/95 px-3 py-3 text-xs shadow-lg ring-1 ring-gray-200 backdrop-blur">
           {#if isSaving}

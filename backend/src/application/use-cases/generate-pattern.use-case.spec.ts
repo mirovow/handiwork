@@ -10,6 +10,7 @@ describe('GeneratePatternUseCase', () => {
       findById: jest.fn(),
       findAll: jest.fn(),
       update: jest.fn(),
+      delete: jest.fn(),
     };
     const imageProcessingService: jest.Mocked<IImageProcessingService> = {
       processImage: jest.fn().mockResolvedValue({

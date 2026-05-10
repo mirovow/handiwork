@@ -2,10 +2,12 @@ import { BadRequestException } from '@nestjs/common';
 import { PatternController } from './pattern.controller';
 import { GeneratePatternUseCase } from '../../application/use-cases/generate-pattern.use-case';
 import { GetPatternsUseCase } from '../../application/use-cases/get-patterns.use-case';
+import { DeletePatternUseCase } from '../../application/use-cases/delete-pattern.use-case';
 
 describe('PatternController', () => {
   let generatePatternUseCase: jest.Mocked<Pick<GeneratePatternUseCase, 'execute'>>;
   let getPatternsUseCase: jest.Mocked<Pick<GetPatternsUseCase, 'execute' | 'executeOne'>>;
+  let deletePatternUseCase: jest.Mocked<Pick<DeletePatternUseCase, 'execute'>>;
   let controller: PatternController;
 
   const validFile = {
@@ -22,9 +24,13 @@ describe('PatternController', () => {
       execute: jest.fn(),
       executeOne: jest.fn(),
     };
+    deletePatternUseCase = {
+      execute: jest.fn(),
+    };
     controller = new PatternController(
       generatePatternUseCase as unknown as GeneratePatternUseCase,
       getPatternsUseCase as unknown as GetPatternsUseCase,
+      deletePatternUseCase as unknown as DeletePatternUseCase,
     );
   });
 
@@ -116,5 +122,13 @@ describe('PatternController', () => {
     await expect(
       controller.createPattern(validFile, '100', '100', '30', 'DMC', 'full_cross', 'maybe'),
     ).rejects.toThrow(BadRequestException);
+  });
+
+  it('deletes a pattern by id', async () => {
+    deletePatternUseCase.execute.mockResolvedValue(true);
+
+    await controller.deletePattern('pattern-id');
+
+    expect(deletePatternUseCase.execute).toHaveBeenCalledWith('pattern-id');
   });
 });

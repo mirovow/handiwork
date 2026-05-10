@@ -51,4 +51,35 @@ describe('PatternMongoRepository', () => {
       { $project: { progressRecords: 0, latestProgressUpdatedAt: 0, lastActivityAt: 0 } },
     ]);
   });
+
+  it('deletes a pattern and its progress records', async () => {
+    const findOneAndDelete = jest.fn().mockReturnValue({
+      exec: jest.fn().mockResolvedValue({ id: 'pattern-id' }),
+    });
+    const deleteMany = jest.fn().mockReturnValue({
+      exec: jest.fn().mockResolvedValue({ deletedCount: 2 }),
+    });
+    const patternModel = { findOneAndDelete };
+    const progressModel = { deleteMany, collection: { name: 'progressmodels' } };
+    const repository = new PatternMongoRepository(patternModel as never, progressModel as never);
+
+    await expect(repository.delete('pattern-id')).resolves.toBe(true);
+
+    expect(findOneAndDelete).toHaveBeenCalledWith({ id: 'pattern-id' });
+    expect(deleteMany).toHaveBeenCalledWith({ patternId: 'pattern-id' });
+  });
+
+  it('does not delete progress records when the pattern does not exist', async () => {
+    const findOneAndDelete = jest.fn().mockReturnValue({
+      exec: jest.fn().mockResolvedValue(null),
+    });
+    const deleteMany = jest.fn();
+    const patternModel = { findOneAndDelete };
+    const progressModel = { deleteMany, collection: { name: 'progressmodels' } };
+    const repository = new PatternMongoRepository(patternModel as never, progressModel as never);
+
+    await expect(repository.delete('missing-pattern')).resolves.toBe(false);
+
+    expect(deleteMany).not.toHaveBeenCalled();
+  });
 });

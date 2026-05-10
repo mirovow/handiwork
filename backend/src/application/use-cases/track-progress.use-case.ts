@@ -16,11 +16,13 @@ export class TrackProgressUseCase {
     if (progress) {
       progress.schemaVersion = 2;
       progress.completedStitches = completedStitches;
+      progress.elapsedSeconds = progress.elapsedSeconds ?? 0;
     } else {
       progress = new Progress({
         patternId,
         schemaVersion: 2,
         completedStitches,
+        elapsedSeconds: 0,
         updatedAt: new Date(),
       });
     }

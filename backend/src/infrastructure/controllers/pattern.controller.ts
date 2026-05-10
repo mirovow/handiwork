@@ -2,7 +2,10 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Delete,
   Get,
+  HttpCode,
+  NotFoundException,
   Param,
   Post,
   UploadedFile,
@@ -13,6 +16,7 @@ import { diskStorage } from 'multer';
 import { extname } from 'path';
 import { GeneratePatternUseCase } from '../../application/use-cases/generate-pattern.use-case';
 import { GetPatternsUseCase } from '../../application/use-cases/get-patterns.use-case';
+import { DeletePatternUseCase } from '../../application/use-cases/delete-pattern.use-case';
 import { randomUUID } from 'crypto';
 import {
   ensureUploadsDirectory,
@@ -40,6 +44,7 @@ export class PatternController {
   constructor(
     private readonly generatePatternUseCase: GeneratePatternUseCase,
     private readonly getPatternsUseCase: GetPatternsUseCase,
+    private readonly deletePatternUseCase: DeletePatternUseCase,
   ) {}
 
   @Post()
@@ -107,6 +112,15 @@ export class PatternController {
   @Get(':id')
   async getPattern(@Param('id') id: string) {
     return this.getPatternsUseCase.executeOne(id);
+  }
+
+  @Delete(':id')
+  @HttpCode(204)
+  async deletePattern(@Param('id') id: string) {
+    const deleted = await this.deletePatternUseCase.execute(id);
+    if (!deleted) {
+      throw new NotFoundException('Pattern not found');
+    }
   }
 
   private validateImageFile(file: Express.Multer.File | undefined): asserts file is Express.Multer.File {

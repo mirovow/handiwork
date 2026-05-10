@@ -20,8 +20,30 @@ export class ProgressMongoRepository implements IProgressRepository {
   async save(progress: Progress): Promise<Progress> {
     const doc = await this.model.findOneAndUpdate(
       { patternId: progress.patternId },
-      { schemaVersion: 2, completedStitches: progress.completedStitches, updatedAt: new Date() },
+      {
+        $set: {
+          schemaVersion: 2,
+          completedStitches: progress.completedStitches,
+          updatedAt: new Date(),
+        },
+        $setOnInsert: {
+          elapsedSeconds: progress.elapsedSeconds ?? 0,
+        },
+      },
       { new: true, upsert: true }
+    ).exec();
+    return new Progress(doc.toObject());
+  }
+
+  async addElapsedSeconds(patternId: string, elapsedSeconds: number): Promise<Progress> {
+    const doc = await this.model.findOneAndUpdate(
+      { patternId },
+      {
+        $set: { schemaVersion: 2, updatedAt: new Date() },
+        $setOnInsert: { completedStitches: [] },
+        $inc: { elapsedSeconds },
+      },
+      { new: true, upsert: true },
     ).exec();
     return new Progress(doc.toObject());
   }

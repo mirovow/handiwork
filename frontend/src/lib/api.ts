@@ -50,6 +50,16 @@ export const api = {
     return text ? JSON.parse(text) : null;
   },
 
+  deletePattern: async (id: string) => {
+    const res = await fetch(`${API_URL}/patterns/${id}`, {
+      method: 'DELETE',
+    });
+
+    if (!res.ok) {
+      throw new Error('Failed to delete pattern');
+    }
+  },
+
   getProgress: async (patternId: string) => {
     const res = await fetch(`${API_URL}/progress/${patternId}`);
     if (!res.ok) return null;
@@ -66,6 +76,27 @@ export const api = {
       body: JSON.stringify({ completedStitches }),
     });
     return res.json();
+  },
+
+  addProgressTime: async (patternId: string, elapsedSeconds: number, keepalive = false) => {
+    const res = await fetch(`${API_URL}/progress/${patternId}/time`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ elapsedSeconds }),
+      keepalive,
+    });
+    return res.json();
+  },
+
+  sendProgressTime: (patternId: string, elapsedSeconds: number) => {
+    if (!navigator.sendBeacon) return false;
+
+    const payload = new Blob([JSON.stringify({ elapsedSeconds })], {
+      type: 'application/json',
+    });
+    return navigator.sendBeacon(`${API_URL}/progress/${patternId}/time`, payload);
   },
   
   getImageUrl: (path: string) => {

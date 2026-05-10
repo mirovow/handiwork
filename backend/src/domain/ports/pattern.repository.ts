@@ -7,4 +7,5 @@ export interface IPatternRepository {
   findById(id: string): Promise<Pattern | null>;
   findAll(): Promise<Pattern[]>;
   update(id: string, pattern: Partial<Pattern>): Promise<Pattern | null>;
+  delete(id: string): Promise<boolean>;
 }

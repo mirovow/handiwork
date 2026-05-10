@@ -1,5 +1,47 @@
 <script lang="ts">
   import { api } from '$lib/api';
+  import { onMount } from 'svelte';
+
+  type GalleryPattern = {
+    id: string;
+    patternImagePath: string;
+    settings: {
+      width: number;
+      height: number;
+    };
+    createdAt: string;
+  };
+
+  let patterns = $state<GalleryPattern[]>([]);
+  let isLoading = $state(true);
+  let error = $state('');
+  let deletingPatternId = $state<string | null>(null);
+
+  onMount(async () => {
+    try {
+      patterns = await api.getPatterns();
+    } catch (e) {
+      error = e instanceof Error ? e.message : 'Неизвестная ошибка';
+    } finally {
+      isLoading = false;
+    }
+  });
+
+  async function deletePattern(patternId: string) {
+    if (!confirm('Удалить эту схему? Это действие нельзя отменить.')) {
+      return;
+    }
+
+    try {
+      deletingPatternId = patternId;
+      await api.deletePattern(patternId);
+      patterns = patterns.filter((pattern) => pattern.id !== patternId);
+    } catch (e) {
+      error = e instanceof Error ? e.message : 'Не удалось удалить схему';
+    } finally {
+      deletingPatternId = null;
+    }
+  }
 </script>
 
 <svelte:head>
@@ -12,11 +54,15 @@
     <a href="/" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-md text-sm font-medium">Новая схема</a>
   </div>
 
-  {#await api.getPatterns()}
+  {#if isLoading}
     <div class="flex justify-center py-12">
       <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
     </div>
-  {:then patterns}
+  {:else if error}
+    <div class="bg-red-50 text-red-700 p-4 rounded-md">
+      Ошибка при загрузке галереи: {error}
+    </div>
+  {:else}
     {#if patterns && patterns.length > 0}
       <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
         {#each patterns as pattern}
@@ -34,9 +80,22 @@
                   Создана: {new Date(pattern.createdAt).toLocaleDateString('ru-RU')}
                 </p>
               </div>
-              <a href={`/workspace/${pattern.id}`} class="w-full text-center bg-indigo-50 text-indigo-700 hover:bg-indigo-100 py-2 rounded-md text-sm font-medium transition-colors">
-                Вышивать
-              </a>
+              <div class="flex items-center gap-2">
+                <a href={`/workspace/${pattern.id}`} class="flex-1 text-center bg-indigo-50 text-indigo-700 hover:bg-indigo-100 py-2 rounded-md text-sm font-medium transition-colors">
+                  Вышивать
+                </a>
+                <button
+                  type="button"
+                  onclick={() => deletePattern(pattern.id)}
+                  disabled={deletingPatternId === pattern.id}
+                  class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-red-50 text-red-700 transition-colors hover:bg-red-100 disabled:bg-gray-100 disabled:text-gray-400"
+                  aria-label="Удалить схему"
+                >
+                  <svg class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                    <path fill-rule="evenodd" d="M8.75 1A1.75 1.75 0 0 0 7 2.75V4H3.25a.75.75 0 0 0 0 1.5h.3l.77 10.007A2.75 2.75 0 0 0 7.062 18h5.876a2.75 2.75 0 0 0 2.742-2.493L16.45 5.5h.3a.75.75 0 0 0 0-1.5H13V2.75A1.75 1.75 0 0 0 11.25 1h-2.5ZM8.5 4h3V2.75a.25.25 0 0 0-.25-.25h-2.5a.25.25 0 0 0-.25.25V4Zm-.25 4.25a.75.75 0 0 1 .75.75v5a.75.75 0 0 1-1.5 0V9a.75.75 0 0 1 .75-.75Zm4.25.75a.75.75 0 0 0-1.5 0v5a.75.75 0 0 0 1.5 0V9Z" clip-rule="evenodd" />
+                  </svg>
+                </button>
+              </div>
             </div>
           </div>
         {/each}
@@ -47,9 +106,5 @@
         <a href="/" class="text-indigo-600 hover:text-indigo-500 font-medium">Создать первую схему &rarr;</a>
       </div>
     {/if}
-  {:catch error}
-    <div class="bg-red-50 text-red-700 p-4 rounded-md">
-      Ошибка при загрузке галереи: {error.message}
-    </div>
-  {/await}
+  {/if}
 </div>
