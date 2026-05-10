@@ -5,7 +5,7 @@ import { PATTERN_REPOSITORY } from '../../domain/ports/pattern.repository';
 import type { IPatternRepository } from '../../domain/ports/pattern.repository';
 import { IMAGE_PROCESSING_SERVICE } from '../../domain/ports/image-processing.service';
 import type { IImageProcessingService } from '../../domain/ports/image-processing.service';
-import { Pattern } from '../../domain/entities/pattern.entity';
+import { Pattern, type StitchKind } from '../../domain/entities/pattern.entity';
 
 @Injectable()
 export class GeneratePatternUseCase {
@@ -19,7 +19,13 @@ export class GeneratePatternUseCase {
 
   async execute(
     inputImagePath: string,
-    settings: { width: number; height: number; maxColors: number; threadPalette: string },
+    settings: {
+      width: number;
+      height: number;
+      maxColors: number;
+      threadPalette: string;
+      selectedStitchKinds: StitchKind[];
+    },
   ): Promise<Pattern> {
     const id = randomUUID();
     const patternFileName = `pattern_${id}.png`;
@@ -33,15 +39,19 @@ export class GeneratePatternUseCase {
       settings.height,
       settings.maxColors,
       settings.threadPalette,
+      settings.selectedStitchKinds,
     );
 
     const pattern = new Pattern({
       id,
+      schemaVersion: 2,
       originalImagePath: inputImagePath,
       patternImagePath,
       settings,
       palette,
       patternData,
+      backstitches: [],
+      knots: [],
       createdAt: new Date(),
     });
 

@@ -24,6 +24,7 @@ import {
   isThreadPaletteId,
   type ThreadPaletteId,
 } from '../utils/thread-palettes';
+import { isStitchKind, type StitchKind } from '../../domain/entities/pattern.entity';
 
 const backendConfig = getBackendConfig();
 const uploadsPath = getUploadsPath(backendConfig);
@@ -70,15 +71,17 @@ export class PatternController {
     @Body('height') height: string,
     @Body('maxColors') maxColors: string | undefined,
     @Body('threadPalette') threadPalette: string | undefined,
+    @Body('selectedStitchKinds') selectedStitchKinds: string | undefined,
   ) {
     this.validateImageFile(file);
-    const settings = this.parsePatternSettings(width, height, maxColors, threadPalette);
+    const settings = this.parsePatternSettings(width, height, maxColors, threadPalette, selectedStitchKinds);
 
     return this.generatePatternUseCase.execute(file.path, {
       width: settings.width,
       height: settings.height,
       maxColors: settings.maxColors,
       threadPalette: settings.threadPalette,
+      selectedStitchKinds: settings.selectedStitchKinds,
     });
   }
 
@@ -116,12 +119,20 @@ export class PatternController {
     height: string,
     maxColors: string | undefined,
     threadPalette: string | undefined,
-  ): { width: number; height: number; maxColors: number; threadPalette: ThreadPaletteId } {
+    selectedStitchKinds: string | undefined,
+  ): {
+    width: number;
+    height: number;
+    maxColors: number;
+    threadPalette: ThreadPaletteId;
+    selectedStitchKinds: StitchKind[];
+  } {
     return {
       width: this.parsePatternDimension('width', width),
       height: this.parsePatternDimension('height', height),
       maxColors: this.parseMaxColors(maxColors),
       threadPalette: this.parseThreadPalette(threadPalette),
+      selectedStitchKinds: this.parseSelectedStitchKinds(selectedStitchKinds),
     };
   }
 
@@ -171,5 +182,27 @@ export class PatternController {
     }
 
     return value;
+  }
+
+  private parseSelectedStitchKinds(value: string | undefined): StitchKind[] {
+    if (value === undefined) {
+      return ['full_cross'];
+    }
+
+    const parsed = value
+      .split(',')
+      .map((item) => item.trim())
+      .filter(Boolean);
+
+    if (parsed.length === 0) {
+      throw new BadRequestException('At least one stitch kind must be selected');
+    }
+
+    const uniqueKinds = Array.from(new Set(parsed));
+    if (!uniqueKinds.every(isStitchKind)) {
+      throw new BadRequestException('Unknown stitch kind');
+    }
+
+    return uniqueKinds;
   }
 }

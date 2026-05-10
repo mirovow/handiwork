@@ -1,7 +1,21 @@
 <script lang="ts">
   import { page } from '$app/stores';
-  import { api } from '$lib/api';
+  import { api, type CompletedStitch } from '$lib/api';
   import { onMount } from 'svelte';
+
+  type CellStitch = {
+    id: string;
+    kind: 'full_cross' | 'half_cross' | 'quarter_cross' | 'three_quarter_cross';
+    threadCode: string;
+    direction?: 'slash' | 'backslash';
+    corner?: 'top_left' | 'top_right' | 'bottom_left' | 'bottom_right';
+  };
+
+  type PatternCell = {
+    x: number;
+    y: number;
+    stitches: CellStitch[];
+  };
 
   const patternId = $page.params.id ?? '';
   
@@ -9,8 +23,7 @@
   let progress = $state(null as any);
   let loading = $state(true);
   
-  // Set to store stitched coordinates as strings "x,y" for O(1) lookup
-  let stitchedSet = $state(new Set<string>());
+  let completedStitchIds = $state(new Set<string>());
   
   // Debounce saving
   let saveTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -25,12 +38,12 @@
       pattern = patternData;
       progress = progressData;
       
-      if (progress && progress.stitchedCoords) {
+      if (progress && progress.completedStitches) {
         const newSet = new Set<string>();
-        progress.stitchedCoords.forEach((coord: {x: number, y: number}) => {
-          newSet.add(`${coord.x},${coord.y}`);
+        progress.completedStitches.forEach((completedStitch: CompletedStitch) => {
+          newSet.add(completedStitch.stitchId);
         });
-        stitchedSet = newSet;
+        completedStitchIds = newSet;
       }
     } catch (e) {
       console.error(e);
@@ -39,19 +52,23 @@
     }
   });
 
-  function toggleStitch(x: number, y: number) {
-    if (pattern.patternData[y][x] === 'EMPTY') return; // Cannot stitch empty cells
+  function getPrimaryStitch(cell: PatternCell) {
+    return cell.stitches[0];
+  }
 
-    const key = `${x},${y}`;
-    const newSet = new Set(stitchedSet);
+  function toggleStitch(cell: PatternCell) {
+    const stitch = getPrimaryStitch(cell);
+    if (!stitch) return;
+
+    const newSet = new Set(completedStitchIds);
     
-    if (newSet.has(key)) {
-      newSet.delete(key);
+    if (newSet.has(stitch.id)) {
+      newSet.delete(stitch.id);
     } else {
-      newSet.add(key);
+      newSet.add(stitch.id);
     }
     
-    stitchedSet = newSet;
+    completedStitchIds = newSet;
     scheduleSave();
   }
 
@@ -60,13 +77,10 @@
     isSaving = true;
     
     saveTimeout = setTimeout(async () => {
-      const coordsArray = Array.from(stitchedSet).map(key => {
-        const [x, y] = key.split(',').map(Number);
-        return { x, y };
-      });
+      const completedStitches = Array.from(completedStitchIds).map((stitchId) => ({ stitchId }));
       
       try {
-        await api.saveProgress(patternId, coordsArray);
+        await api.saveProgress(patternId, completedStitches);
       } catch (e) {
         console.error('Failed to save progress', e);
       } finally {
@@ -79,11 +93,39 @@
     return pattern.settings.threadPalette || pattern.palette[0]?.manufacturer || 'DMC';
   }
 
-  // Get color hex for a given thread code
-  function getColorHex(threadCode: string) {
-    if (threadCode === 'EMPTY') return 'transparent';
+  function getCellThreadCode(cell: PatternCell) {
+    return getPrimaryStitch(cell)?.threadCode;
+  }
+
+  function getColorHex(cell: PatternCell) {
+    const threadCode = getCellThreadCode(cell);
+    if (!threadCode) return 'transparent';
     const color = pattern.palette.find((c: any) => (c.code ?? c.name) === threadCode);
     return color ? color.hex : '#ffffff';
+  }
+
+  function getStitchStrokeColor(cell: PatternCell) {
+    const hex = getColorHex(cell);
+    if (!hex.startsWith('#') || hex.length !== 7) return '#111827';
+
+    const r = Number.parseInt(hex.slice(1, 3), 16);
+    const g = Number.parseInt(hex.slice(3, 5), 16);
+    const b = Number.parseInt(hex.slice(5, 7), 16);
+    const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+
+    return luminance > 0.55 ? '#111827' : '#ffffff';
+  }
+
+  function isStitchCompleted(cell: PatternCell) {
+    const stitch = getPrimaryStitch(cell);
+    return stitch ? completedStitchIds.has(stitch.id) : false;
+  }
+
+  function getTotalStitches() {
+    return pattern.patternData.reduce(
+      (acc: number, row: PatternCell[]) => acc + row.reduce((rowAcc, cell) => rowAcc + cell.stitches.length, 0),
+      (pattern.backstitches?.length ?? 0) + (pattern.knots?.length ?? 0)
+    );
   }
 
   function getOzonSearchUrl(color: any) {
@@ -107,6 +149,10 @@
     <div class="flex-1 flex justify-center items-center">
       <p class="text-red-600">Схема не найдена.</p>
     </div>
+  {:else if pattern.schemaVersion !== 2}
+    <div class="flex-1 flex justify-center items-center">
+      <p class="text-red-600">Схема создана в старом формате, создайте ее заново.</p>
+    </div>
   {:else}
     <!-- Top toolbar -->
     <div class="bg-white border-b border-gray-200 px-4 py-3 flex justify-between items-center z-10 shadow-sm">
@@ -118,9 +164,7 @@
       </div>
       <div class="flex items-center space-x-4 text-sm">
         <div class="text-gray-500">
-          Прогресс: {stitchedSet.size} / {
-            pattern.patternData.reduce((acc: number, row: string[]) => acc + row.filter(c => c !== 'EMPTY').length, 0)
-          } крестиков
+          Прогресс: {completedStitchIds.size} / {getTotalStitches()} крестиков
         </div>
         <div class="text-xs">
           {#if isSaving}
@@ -176,20 +220,65 @@
                 <!-- svelte-ignore a11y_click_events_have_key_events -->
                 <!-- svelte-ignore a11y_no_static_element_interactions -->
                 <div 
-                  class="w-full h-full border-r border-b border-gray-200 cursor-pointer flex items-center justify-center {cell === 'EMPTY' ? 'bg-transparent border-transparent' : 'hover:opacity-80'}"
+                  class="relative w-full h-full border-r border-b border-gray-200 cursor-pointer flex items-center justify-center {cell.stitches.length === 0 ? 'bg-transparent border-transparent' : 'hover:opacity-80'}"
                   style="
-                    background-color: {cell === 'EMPTY' ? 'transparent' : getColorHex(cell)};
+                    background-color: {getColorHex(cell)};
                     border-left: {x === 0 ? '1px solid #e5e7eb' : 'none'};
                     border-top: {y === 0 ? '1px solid #e5e7eb' : 'none'};
                   "
-                  onclick={() => toggleStitch(x, y)}
+                  onclick={() => toggleStitch(cell)}
                 >
-                  {#if stitchedSet.has(`${x},${y}`)}
-                    <svg class="w-3 h-3 text-white drop-shadow-md" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
-                      <line x1="18" y1="6" x2="6" y2="18"></line>
-                      <line x1="6" y1="6" x2="18" y2="18"></line>
+                  {#each cell.stitches.slice(0, 1) as stitch}
+                    <svg
+                      class="h-full w-full drop-shadow-sm"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke={getStitchStrokeColor(cell)}
+                      stroke-width="2.5"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      aria-hidden="true"
+                    >
+                      {#if stitch.kind === 'full_cross'}
+                        <line x1="4" y1="4" x2="20" y2="20"></line>
+                        <line x1="20" y1="4" x2="4" y2="20"></line>
+                      {:else if stitch.kind === 'half_cross'}
+                        {#if stitch.direction === 'backslash'}
+                          <line x1="4" y1="4" x2="20" y2="20"></line>
+                        {:else}
+                          <line x1="4" y1="20" x2="20" y2="4"></line>
+                        {/if}
+                      {:else if stitch.kind === 'quarter_cross'}
+                        {#if stitch.corner === 'top_right'}
+                          <line x1="20" y1="4" x2="12" y2="12"></line>
+                        {:else if stitch.corner === 'bottom_left'}
+                          <line x1="4" y1="20" x2="12" y2="12"></line>
+                        {:else if stitch.corner === 'bottom_right'}
+                          <line x1="20" y1="20" x2="12" y2="12"></line>
+                        {:else}
+                          <line x1="4" y1="4" x2="12" y2="12"></line>
+                        {/if}
+                      {:else if stitch.kind === 'three_quarter_cross'}
+                        {#if stitch.direction === 'backslash'}
+                          <line x1="4" y1="4" x2="20" y2="20"></line>
+                        {:else}
+                          <line x1="4" y1="20" x2="20" y2="4"></line>
+                        {/if}
+                        {#if stitch.corner === 'top_right'}
+                          <line x1="20" y1="4" x2="12" y2="12"></line>
+                        {:else if stitch.corner === 'bottom_left'}
+                          <line x1="4" y1="20" x2="12" y2="12"></line>
+                        {:else if stitch.corner === 'bottom_right'}
+                          <line x1="20" y1="20" x2="12" y2="12"></line>
+                        {:else}
+                          <line x1="4" y1="4" x2="12" y2="12"></line>
+                        {/if}
+                      {/if}
                     </svg>
-                  {/if}
+                    {#if isStitchCompleted(cell)}
+                      <span class="absolute right-0.5 top-0.5 h-1.5 w-1.5 rounded-full bg-emerald-400 ring-1 ring-white"></span>
+                    {/if}
+                  {/each}
                 </div>
               {/each}
             {/each}

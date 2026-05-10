@@ -8,8 +8,11 @@ export class ProgressModel {
   @Prop()
   patternId: string;
 
-  @Prop({ type: [{ x: Number, y: Number }] })
-  stitchedCoords: Array<{ x: number; y: number }>;
+  @Prop({ default: 2 })
+  schemaVersion: 2;
+
+  @Prop({ type: [{ stitchId: String, completedAt: String }], default: [] })
+  completedStitches: Array<{ stitchId: string; completedAt?: string }>;
 }
 
 export const ProgressSchema = SchemaFactory.createForClass(ProgressModel);

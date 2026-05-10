@@ -1,6 +1,12 @@
+export type CompletedStitch = {
+  stitchId: string;
+  completedAt?: string;
+};
+
 export class Progress {
   patternId: string;
-  stitchedCoords: Array<{ x: number; y: number }>;
+  schemaVersion: 2;
+  completedStitches: CompletedStitch[];
   updatedAt: Date;
 
   constructor(partial: Partial<Progress>) {

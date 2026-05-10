@@ -17,12 +17,13 @@ describe('progress use cases', () => {
     progressRepository.findByPatternId.mockResolvedValue(null);
     const useCase = new TrackProgressUseCase(progressRepository);
 
-    await useCase.execute('pattern-id', [{ x: 1, y: 2 }]);
+    await useCase.execute('pattern-id', [{ stitchId: '1:2:full', completedAt: '2026-01-02T00:00:00.000Z' }]);
 
     expect(progressRepository.save).toHaveBeenCalledWith(
       expect.objectContaining({
         patternId: 'pattern-id',
-        stitchedCoords: [{ x: 1, y: 2 }],
+        schemaVersion: 2,
+        completedStitches: [{ stitchId: '1:2:full', completedAt: '2026-01-02T00:00:00.000Z' }],
         updatedAt: expect.any(Date),
       }),
     );
@@ -31,18 +32,20 @@ describe('progress use cases', () => {
   it('updates existing progress', async () => {
     const existing = new Progress({
       patternId: 'pattern-id',
-      stitchedCoords: [{ x: 0, y: 0 }],
+      schemaVersion: 2,
+      completedStitches: [{ stitchId: '0:0:full' }],
       updatedAt: new Date('2026-01-01T00:00:00Z'),
     });
     progressRepository.findByPatternId.mockResolvedValue(existing);
     const useCase = new TrackProgressUseCase(progressRepository);
 
-    await useCase.execute('pattern-id', [{ x: 3, y: 4 }]);
+    await useCase.execute('pattern-id', [{ stitchId: '3:4:full' }]);
 
     expect(progressRepository.save).toHaveBeenCalledWith(
       expect.objectContaining({
         patternId: 'pattern-id',
-        stitchedCoords: [{ x: 3, y: 4 }],
+        schemaVersion: 2,
+        completedStitches: [{ stitchId: '3:4:full' }],
       }),
     );
   });
@@ -50,7 +53,8 @@ describe('progress use cases', () => {
   it('gets progress by pattern id', async () => {
     const progress = new Progress({
       patternId: 'pattern-id',
-      stitchedCoords: [],
+      schemaVersion: 2,
+      completedStitches: [],
       updatedAt: new Date(),
     });
     progressRepository.findByPatternId.mockResolvedValue(progress);

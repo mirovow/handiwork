@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { api } from '$lib/api';
+  import { api, type StitchKind } from '$lib/api';
   import { goto } from '$app/navigation';
   import { onMount } from 'svelte';
 
@@ -8,11 +8,25 @@
     label: string;
   };
 
+  type StitchKindOption = {
+    id: StitchKind;
+    label: string;
+    description: string;
+  };
+
+  const stitchKindOptions: StitchKindOption[] = [
+    { id: 'full_cross', label: 'Обычный крестик', description: 'Полный X на всю клетку.' },
+    { id: 'half_cross', label: 'Полукрест', description: 'Одна диагональ / или \\.' },
+    { id: 'quarter_cross', label: 'Четверть крестика', description: 'Короткий стежок от угла к центру.' },
+    { id: 'three_quarter_cross', label: 'Три четверти крестика', description: 'Диагональ плюс короткий стежок для сглаживания края.' },
+  ];
+
   let file: File | null = $state(null);
   let width = $state(100);
   let height = $state(100);
   let maxColors = $state(30);
   let threadPalette = $state('DMC');
+  let selectedStitchKinds = $state<StitchKind[]>(['full_cross']);
   let threadPalettes = $state<ThreadPalette[]>([{ id: 'DMC', label: 'DMC' }]);
   let isUploading = $state(false);
   let error = $state('');
@@ -36,16 +50,41 @@
     }
   }
 
+  function isStitchKindSelected(stitchKind: StitchKind) {
+    return selectedStitchKinds.includes(stitchKind);
+  }
+
+  function toggleStitchKind(stitchKind: StitchKind) {
+    if (selectedStitchKinds.includes(stitchKind)) {
+      if (selectedStitchKinds.length === 1) {
+        error = 'Нужно выбрать хотя бы один вид крестиков';
+        return;
+      }
+
+      selectedStitchKinds = selectedStitchKinds.filter((selected) => selected !== stitchKind);
+      error = '';
+      return;
+    }
+
+    selectedStitchKinds = [...selectedStitchKinds, stitchKind];
+    error = '';
+  }
+
   async function handleSubmit() {
     if (!file) {
       error = 'Пожалуйста, выберите изображение';
+      return;
+    }
+
+    if (selectedStitchKinds.length === 0) {
+      error = 'Нужно выбрать хотя бы один вид крестиков';
       return;
     }
     
     try {
       isUploading = true;
       error = '';
-      const result = await api.uploadImage(file, width, height, maxColors, threadPalette);
+      const result = await api.uploadImage(file, width, height, maxColors, threadPalette, selectedStitchKinds);
       if (result && result.id) {
         goto(`/workspace/${result.id}`);
       } else {
@@ -120,6 +159,29 @@
       </select>
       <p class="mt-1 text-xs text-gray-500">Выбранная палитра влияет на итоговые цвета схемы.</p>
     </div>
+
+    <fieldset>
+      <legend class="block text-sm font-medium text-gray-700">Виды крестиков в схеме</legend>
+      <p class="mt-1 text-xs text-gray-500">
+        Если выбрать несколько видов, обычные крестики будут использоваться внутри цветовых областей, а дробные — на границах для сглаживания.
+      </p>
+      <div class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+        {#each stitchKindOptions as stitchKind}
+          <label class="flex cursor-pointer items-start gap-3 rounded-md border border-gray-200 p-3 hover:border-indigo-300">
+            <input
+              type="checkbox"
+              checked={isStitchKindSelected(stitchKind.id)}
+              onchange={() => toggleStitchKind(stitchKind.id)}
+              class="mt-1 h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+            >
+            <span>
+              <span class="block text-sm font-medium text-gray-900">{stitchKind.label}</span>
+              <span class="block text-xs text-gray-500">{stitchKind.description}</span>
+            </span>
+          </label>
+        {/each}
+      </div>
+    </fieldset>
 
     <div class="pt-4">
       <button 

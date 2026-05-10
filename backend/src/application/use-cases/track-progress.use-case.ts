@@ -1,7 +1,7 @@
 import { Injectable, Inject } from '@nestjs/common';
 import { PROGRESS_REPOSITORY } from '../../domain/ports/progress.repository';
 import type { IProgressRepository } from '../../domain/ports/progress.repository';
-import { Progress } from '../../domain/entities/progress.entity';
+import { CompletedStitch, Progress } from '../../domain/entities/progress.entity';
 
 @Injectable()
 export class TrackProgressUseCase {
@@ -10,15 +10,17 @@ export class TrackProgressUseCase {
     private readonly progressRepository: IProgressRepository,
   ) {}
 
-  async execute(patternId: string, stitchedCoords: Array<{ x: number; y: number }>): Promise<Progress> {
+  async execute(patternId: string, completedStitches: CompletedStitch[]): Promise<Progress> {
     let progress = await this.progressRepository.findByPatternId(patternId);
     
     if (progress) {
-      progress.stitchedCoords = stitchedCoords;
+      progress.schemaVersion = 2;
+      progress.completedStitches = completedStitches;
     } else {
       progress = new Progress({
         patternId,
-        stitchedCoords,
+        schemaVersion: 2,
+        completedStitches,
         updatedAt: new Date(),
       });
     }

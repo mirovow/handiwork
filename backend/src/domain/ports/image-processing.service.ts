@@ -1,3 +1,5 @@
+import type { PatternCell, StitchKind } from '../entities/pattern.entity';
+
 export const IMAGE_PROCESSING_SERVICE = 'IMAGE_PROCESSING_SERVICE';
 
 export interface IImageProcessingService {
@@ -8,8 +10,9 @@ export interface IImageProcessingService {
     height: number,
     maxColors: number,
     threadPalette: string,
+    selectedStitchKinds: StitchKind[],
   ): Promise<{
-    patternData: string[][];
+    patternData: PatternCell[][];
     palette: Array<{
       manufacturer: string;
       code: string;

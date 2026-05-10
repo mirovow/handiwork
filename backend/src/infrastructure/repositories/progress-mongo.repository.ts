@@ -20,7 +20,7 @@ export class ProgressMongoRepository implements IProgressRepository {
   async save(progress: Progress): Promise<Progress> {
     const doc = await this.model.findOneAndUpdate(
       { patternId: progress.patternId },
-      { stitchedCoords: progress.stitchedCoords, updatedAt: new Date() },
+      { schemaVersion: 2, completedStitches: progress.completedStitches, updatedAt: new Date() },
       { new: true, upsert: true }
     ).exec();
     return new Progress(doc.toObject());

@@ -1,5 +1,12 @@
 const API_URL = (import.meta.env.VITE_API_URL || 'http://localhost:3000').replace(/\/$/, '');
 
+export type CompletedStitch = {
+  stitchId: string;
+  completedAt?: string;
+};
+
+export type StitchKind = 'full_cross' | 'half_cross' | 'quarter_cross' | 'three_quarter_cross';
+
 export const api = {
   uploadImage: async (
     file: File,
@@ -7,6 +14,7 @@ export const api = {
     height: number,
     maxColors: number,
     threadPalette: string,
+    selectedStitchKinds: StitchKind[],
   ) => {
     const formData = new FormData();
     formData.append('image', file);
@@ -14,6 +22,7 @@ export const api = {
     formData.append('height', height.toString());
     formData.append('maxColors', maxColors.toString());
     formData.append('threadPalette', threadPalette);
+    formData.append('selectedStitchKinds', selectedStitchKinds.join(','));
 
     const res = await fetch(`${API_URL}/patterns`, {
       method: 'POST',
@@ -46,13 +55,13 @@ export const api = {
     return text ? JSON.parse(text) : null;
   },
 
-  saveProgress: async (patternId: string, stitchedCoords: Array<{x: number, y: number}>) => {
+  saveProgress: async (patternId: string, completedStitches: CompletedStitch[]) => {
     const res = await fetch(`${API_URL}/progress/${patternId}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ stitchedCoords }),
+      body: JSON.stringify({ completedStitches }),
     });
     return res.json();
   },

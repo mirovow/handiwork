@@ -1,5 +1,45 @@
+export type StitchKind = 'full_cross' | 'half_cross' | 'quarter_cross' | 'three_quarter_cross';
+
+export type StitchDirection = 'slash' | 'backslash';
+
+export type StitchCorner = 'top_left' | 'top_right' | 'bottom_left' | 'bottom_right';
+
+export type CellStitch = {
+  id: string;
+  kind: StitchKind;
+  threadCode: string;
+  direction?: StitchDirection;
+  corner?: StitchCorner;
+};
+
+export type PatternCell = {
+  x: number;
+  y: number;
+  stitches: CellStitch[];
+};
+
+export type Backstitch = {
+  id: string;
+  threadCode: string;
+  from: { x: number; y: number };
+  to: { x: number; y: number };
+};
+
+export type FrenchKnot = {
+  id: string;
+  threadCode: string;
+  at: { x: number; y: number };
+};
+
+export const stitchKinds = ['full_cross', 'half_cross', 'quarter_cross', 'three_quarter_cross'] as const;
+
+export function isStitchKind(value: string): value is StitchKind {
+  return (stitchKinds as readonly string[]).includes(value);
+}
+
 export class Pattern {
   id: string;
+  schemaVersion: 2;
   originalImagePath: string;
   patternImagePath: string;
   settings: {
@@ -7,6 +47,7 @@ export class Pattern {
     height: number;
     maxColors: number;
     threadPalette: string;
+    selectedStitchKinds: StitchKind[];
   };
   palette: Array<{
     manufacturer: string;
@@ -15,7 +56,9 @@ export class Pattern {
     rgb: [number, number, number];
     hex: string;
   }>;
-  patternData: Array<Array<string>>; // 2D array of hex strings or DMC names representing the pattern
+  patternData: PatternCell[][];
+  backstitches: Backstitch[];
+  knots: FrenchKnot[];
   createdAt: Date;
 
   constructor(partial: Partial<Pattern>) {

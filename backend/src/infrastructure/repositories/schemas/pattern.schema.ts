@@ -1,5 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document } from 'mongoose';
+import type { Backstitch, FrenchKnot, PatternCell, StitchKind } from '../../../domain/entities/pattern.entity';
 
 export type PatternDocument = PatternModel & Document;
 
@@ -7,6 +8,9 @@ export type PatternDocument = PatternModel & Document;
 export class PatternModel {
   @Prop()
   id: string;
+
+  @Prop({ default: 2 })
+  schemaVersion: 2;
 
   @Prop()
   originalImagePath: string;
@@ -20,6 +24,7 @@ export class PatternModel {
     height: number;
     maxColors: number;
     threadPalette: string;
+    selectedStitchKinds: StitchKind[];
   };
 
   @Prop({ type: Array })
@@ -31,8 +36,26 @@ export class PatternModel {
     hex: string;
   }>;
 
-  @Prop({ type: [[String]] })
-  patternData: string[][];
+  @Prop({
+    type: [[{
+      x: Number,
+      y: Number,
+      stitches: [{
+        id: String,
+        kind: String,
+        threadCode: String,
+        direction: String,
+        corner: String,
+      }],
+    }]],
+  })
+  patternData: PatternCell[][];
+
+  @Prop({ type: Array, default: [] })
+  backstitches: Backstitch[];
+
+  @Prop({ type: Array, default: [] })
+  knots: FrenchKnot[];
 }
 
 export const PatternSchema = SchemaFactory.createForClass(PatternModel);

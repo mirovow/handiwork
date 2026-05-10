@@ -1,6 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import sharp from 'sharp';
 import { IImageProcessingService } from '../../domain/ports/image-processing.service';
+import type {
+  CellStitch,
+  PatternCell,
+  StitchCorner,
+  StitchDirection,
+  StitchKind,
+} from '../../domain/entities/pattern.entity';
 import {
   getThreadPalette,
   isThreadPaletteId,
@@ -16,6 +23,7 @@ export class SharpImageProcessingService implements IImageProcessingService {
     height: number,
     maxColors: number,
     threadPalette: string,
+    selectedStitchKinds: StitchKind[] = ['full_cross'],
   ) {
     if (!isThreadPaletteId(threadPalette)) {
       throw new Error(`Unknown thread palette: ${threadPalette}`);
@@ -69,7 +77,7 @@ export class SharpImageProcessingService implements IImageProcessingService {
       Array.from(paletteStats.values()).map((entry) => [entry.color.code, entry.color]),
     );
     const limitedPaletteByCode = new Map(limitedPalette.map((color) => [color.code, color]));
-    const patternData = initialPatternData.map((row) =>
+    const mappedThreadCodes = initialPatternData.map((row) =>
       row.map((threadCode) => {
         if (threadCode === 'EMPTY' || limitedPaletteByCode.has(threadCode)) {
           return threadCode;
@@ -84,7 +92,7 @@ export class SharpImageProcessingService implements IImageProcessingService {
       }),
     );
     const usedPaletteMap = new Map<string, ThreadColor>();
-    for (const row of patternData) {
+    for (const row of mappedThreadCodes) {
       for (const threadCode of row) {
         if (threadCode === 'EMPTY') {
           continue;
@@ -96,15 +104,24 @@ export class SharpImageProcessingService implements IImageProcessingService {
         }
       }
     }
+    const patternData: PatternCell[][] = mappedThreadCodes.map((row, y) =>
+      row.map((threadCode, x) => ({
+        x,
+        y,
+        stitches: threadCode === 'EMPTY'
+          ? []
+          : [this.createCellStitch(x, y, threadCode, mappedThreadCodes, selectedStitchKinds)],
+      })),
+    );
 
     // Generate preview image using the mapped thread colors.
     const outputData = Buffer.alloc(info.width * info.height * 3);
     for (let y = 0; y < info.height; y++) {
       for (let x = 0; x < info.width; x++) {
-        const threadCode = patternData[y][x];
+        const threadCode = patternData[y][x].stitches[0]?.threadCode;
         const offset = (y * info.width + x) * 3;
         
-        if (threadCode === 'EMPTY') {
+        if (!threadCode) {
           outputData[offset] = 255;
           outputData[offset + 1] = 255;
           outputData[offset + 2] = 255;
@@ -158,5 +175,117 @@ export class SharpImageProcessingService implements IImageProcessingService {
     }
 
     return nearestColor;
+  }
+
+  private createCellStitch(
+    x: number,
+    y: number,
+    threadCode: string,
+    threadCodeGrid: string[][],
+    selectedStitchKinds: StitchKind[],
+  ): CellStitch {
+    const kind = this.pickStitchKind(x, y, threadCode, threadCodeGrid, selectedStitchKinds);
+    const stitch: CellStitch = {
+      id: `${x}:${y}:${this.getStitchIdSuffix(kind)}`,
+      kind,
+      threadCode,
+    };
+
+    if (kind === 'half_cross' || kind === 'three_quarter_cross') {
+      stitch.direction = this.pickDirection(x, y);
+    }
+
+    if (kind === 'quarter_cross' || kind === 'three_quarter_cross') {
+      stitch.corner = this.pickCorner(x, y, threadCode, threadCodeGrid);
+    }
+
+    return stitch;
+  }
+
+  private pickStitchKind(
+    x: number,
+    y: number,
+    threadCode: string,
+    threadCodeGrid: string[][],
+    selectedStitchKinds: StitchKind[],
+  ): StitchKind {
+    if (selectedStitchKinds.length === 1) {
+      return selectedStitchKinds[0];
+    }
+
+    const boundarySides = this.getBoundarySides(x, y, threadCode, threadCodeGrid);
+    const isCornerBoundary = this.hasCornerBoundary(boundarySides);
+
+    if (isCornerBoundary && selectedStitchKinds.includes('three_quarter_cross')) {
+      return 'three_quarter_cross';
+    }
+
+    if (isCornerBoundary && selectedStitchKinds.includes('quarter_cross')) {
+      return 'quarter_cross';
+    }
+
+    if (boundarySides.length > 0 && selectedStitchKinds.includes('half_cross')) {
+      return 'half_cross';
+    }
+
+    if (selectedStitchKinds.includes('full_cross')) {
+      return 'full_cross';
+    }
+
+    return selectedStitchKinds[0];
+  }
+
+  private getBoundarySides(
+    x: number,
+    y: number,
+    threadCode: string,
+    threadCodeGrid: string[][],
+  ): Array<'top' | 'right' | 'bottom' | 'left'> {
+    const neighbors = [
+      { side: 'top' as const, x, y: y - 1 },
+      { side: 'right' as const, x: x + 1, y },
+      { side: 'bottom' as const, x, y: y + 1 },
+      { side: 'left' as const, x: x - 1, y },
+    ];
+
+    return neighbors
+      .filter((neighbor) => threadCodeGrid[neighbor.y]?.[neighbor.x] !== threadCode)
+      .map((neighbor) => neighbor.side);
+  }
+
+  private hasCornerBoundary(boundarySides: Array<'top' | 'right' | 'bottom' | 'left'>): boolean {
+    return (
+      (boundarySides.includes('top') && boundarySides.includes('left')) ||
+      (boundarySides.includes('top') && boundarySides.includes('right')) ||
+      (boundarySides.includes('bottom') && boundarySides.includes('left')) ||
+      (boundarySides.includes('bottom') && boundarySides.includes('right'))
+    );
+  }
+
+  private pickDirection(x: number, y: number): StitchDirection {
+    return (x + y) % 2 === 0 ? 'slash' : 'backslash';
+  }
+
+  private pickCorner(
+    x: number,
+    y: number,
+    threadCode: string,
+    threadCodeGrid: string[][],
+  ): StitchCorner {
+    const boundarySides = this.getBoundarySides(x, y, threadCode, threadCodeGrid);
+
+    if (boundarySides.includes('top') && boundarySides.includes('left')) return 'top_left';
+    if (boundarySides.includes('top') && boundarySides.includes('right')) return 'top_right';
+    if (boundarySides.includes('bottom') && boundarySides.includes('left')) return 'bottom_left';
+    if (boundarySides.includes('bottom') && boundarySides.includes('right')) return 'bottom_right';
+
+    return (x + y) % 2 === 0 ? 'top_left' : 'bottom_right';
+  }
+
+  private getStitchIdSuffix(kind: StitchKind): string {
+    if (kind === 'full_cross') return 'full';
+    if (kind === 'half_cross') return 'half';
+    if (kind === 'quarter_cross') return 'quarter';
+    return 'three-quarter';
   }
 }
