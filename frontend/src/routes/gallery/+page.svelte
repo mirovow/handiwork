@@ -51,8 +51,8 @@
 <div class="mx-auto max-w-7xl">
   <div class="mb-8 flex items-center justify-between gap-4">
     <div>
-      <h1 class="text-3xl font-bold tracking-tight text-gray-950">Ваши схемы</h1>
-      <p class="mt-2 text-sm text-gray-600">Коллекция созданных схем для вышивки.</p>
+      <h1 class="text-3xl font-bold tracking-tight text-gray-950">Мои схемы</h1>
+      <p class="mt-2 text-sm text-gray-600">Моя любимая коллекция схем для вышивки</p>
     </div>
     <a href="/" class="glass-button-primary">Новая схема</a>
   </div>

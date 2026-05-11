@@ -4,8 +4,7 @@
   import { calculateProgressPercent, countTotalStitches } from '$lib/progress';
   import { buildThreadPurchaseUrl, getCellThreadColor, type ThreadColor } from '$lib/thread-color';
   import { formatElapsedTime } from '$lib/time';
-  import { tick } from 'svelte';
-  import { onMount } from 'svelte';
+  import { onMount, tick } from 'svelte';
 
   type CellStitch = {
     id: string;
@@ -19,6 +18,22 @@
     x: number;
     y: number;
     stitches: CellStitch[];
+  };
+
+  type PointerPosition = {
+    x: number;
+    y: number;
+  };
+
+  type InteractionMode = 'idle' | 'pan' | 'pinch';
+
+  type PinchStart = {
+    centerX: number;
+    centerY: number;
+    distance: number;
+    offsetX: number;
+    offsetY: number;
+    scale: number;
   };
 
   const patternId = $page.params.id ?? '';
@@ -38,9 +53,11 @@
   let hoveredCell = $state<{ x: number; y: number } | null>(null);
   let threadTooltipCell = $state<{ x: number; y: number } | null>(null);
   let isPaletteOpen = $state(false);
-  let isPanning = false;
+  let interactionMode: InteractionMode = 'idle';
   let didPan = false;
   let panStart = { x: 0, y: 0, offsetX: 0, offsetY: 0 };
+  let pinchStart: PinchStart | null = null;
+  const activePointers = new Map<number, PointerPosition>();
   let animationFrameId: number | null = null;
   let canvasCssSize = { width: 0, height: 0, dpr: 1 };
   let staticLayer: HTMLCanvasElement | null = null;
@@ -582,15 +599,32 @@
     if (!canvas) return;
     if (event.button !== 0) return;
 
+    event.preventDefault();
     threadTooltipCell = null;
-    isPanning = true;
-    didPan = false;
-    panStart = { x: event.clientX, y: event.clientY, offsetX, offsetY };
-    canvas.setPointerCapture(event.pointerId);
+    activePointers.set(event.pointerId, getPointerPosition(event));
+    capturePointer(event.pointerId);
+
+    if (activePointers.size === 1) {
+      interactionMode = 'pan';
+      didPan = false;
+      panStart = { x: event.clientX, y: event.clientY, offsetX, offsetY };
+    } else {
+      beginPinchGesture();
+    }
   }
 
   function handlePointerMove(event: PointerEvent) {
-    if (isPanning) {
+    if (activePointers.has(event.pointerId)) {
+      event.preventDefault();
+      activePointers.set(event.pointerId, getPointerPosition(event));
+    }
+
+    if (interactionMode === 'pinch') {
+      applyPinchGesture();
+      return;
+    }
+
+    if (interactionMode === 'pan' && activePointers.has(event.pointerId)) {
       const deltaX = event.clientX - panStart.x;
       const deltaY = event.clientY - panStart.y;
       if (Math.abs(deltaX) > 3 || Math.abs(deltaY) > 3) {
@@ -605,22 +639,41 @@
   }
 
   function handlePointerUp(event: PointerEvent) {
-    if (isPanning) {
-      canvas?.releasePointerCapture(event.pointerId);
-      isPanning = false;
-      if (!didPan) {
-        const cellPosition = getCellFromPointer(event);
-        if (!cellPosition) return;
+    if (!activePointers.has(event.pointerId)) return;
 
-        const cell = getCellAt(cellPosition.x, cellPosition.y);
-        if (cell) toggleStitch(cell);
-      }
+    event.preventDefault();
+    activePointers.delete(event.pointerId);
+    releasePointer(event.pointerId);
+
+    if (interactionMode === 'pinch') {
+      rebaseGestureAfterPointerChange();
+      return;
     }
+
+    if (interactionMode === 'pan' && !didPan) {
+      const cellPosition = getCellFromPointer(event);
+      if (!cellPosition) {
+        rebaseGestureAfterPointerChange();
+        return;
+      }
+
+      const cell = getCellAt(cellPosition.x, cellPosition.y);
+      if (cell) toggleStitch(cell);
+    }
+
+    rebaseGestureAfterPointerChange();
+  }
+
+  function handlePointerCancel(event: PointerEvent) {
+    if (!activePointers.has(event.pointerId)) return;
+
+    activePointers.delete(event.pointerId);
+    releasePointer(event.pointerId);
+    rebaseGestureAfterPointerChange();
   }
 
   function handlePointerLeave() {
     hoveredCell = null;
-    isPanning = false;
   }
 
   function handleContextMenu(event: MouseEvent) {
@@ -641,6 +694,111 @@
   function handleWheel(event: WheelEvent) {
     event.preventDefault();
     zoomAt(event.clientX, event.clientY, event.deltaY < 0 ? 1.15 : 0.85);
+  }
+
+  function getPointerPosition(event: PointerEvent): PointerPosition {
+    return { x: event.clientX, y: event.clientY };
+  }
+
+  function getFirstTwoPointers() {
+    const pointers = Array.from(activePointers.values());
+    if (pointers.length < 2) return null;
+
+    return [pointers[0], pointers[1]] as const;
+  }
+
+  function getPointerDistance(first: PointerPosition, second: PointerPosition) {
+    return Math.hypot(second.x - first.x, second.y - first.y);
+  }
+
+  function getPointerCenter(first: PointerPosition, second: PointerPosition) {
+    return {
+      x: (first.x + second.x) / 2,
+      y: (first.y + second.y) / 2,
+    };
+  }
+
+  function beginPinchGesture() {
+    const pointers = getFirstTwoPointers();
+    if (!pointers) return;
+
+    const [first, second] = pointers;
+    const distance = getPointerDistance(first, second);
+    if (distance === 0) return;
+
+    const center = getPointerCenter(first, second);
+    pinchStart = {
+      centerX: center.x,
+      centerY: center.y,
+      distance,
+      offsetX,
+      offsetY,
+      scale: viewScale,
+    };
+    interactionMode = 'pinch';
+    didPan = true;
+    hoveredCell = null;
+  }
+
+  function applyPinchGesture() {
+    if (!canvas || !pinchStart) return;
+
+    const pointers = getFirstTwoPointers();
+    if (!pointers) return;
+
+    const [first, second] = pointers;
+    const distance = getPointerDistance(first, second);
+    if (distance === 0) return;
+
+    const rect = canvas.getBoundingClientRect();
+    const center = getPointerCenter(first, second);
+    const nextScale = Math.min(maxScale, Math.max(minScale, pinchStart.scale * (distance / pinchStart.distance)));
+    const startWorldX = (pinchStart.centerX - rect.left - pinchStart.offsetX) / pinchStart.scale;
+    const startWorldY = (pinchStart.centerY - rect.top - pinchStart.offsetY) / pinchStart.scale;
+
+    offsetX = center.x - rect.left - startWorldX * nextScale;
+    offsetY = center.y - rect.top - startWorldY * nextScale;
+    viewScale = nextScale;
+  }
+
+  function rebaseGestureAfterPointerChange() {
+    pinchStart = null;
+
+    if (activePointers.size >= 2) {
+      beginPinchGesture();
+      return;
+    }
+
+    if (activePointers.size === 1) {
+      const [remainingPointer] = activePointers.values();
+      interactionMode = 'pan';
+      didPan = true;
+      panStart = { x: remainingPointer.x, y: remainingPointer.y, offsetX, offsetY };
+      return;
+    }
+
+    interactionMode = 'idle';
+    didPan = false;
+  }
+
+  function capturePointer(pointerId: number) {
+    try {
+      canvas?.setPointerCapture(pointerId);
+    } catch {
+      // Some test and embedded browser environments do not support pointer capture.
+    }
+  }
+
+  function releasePointer(pointerId: number) {
+    if (!canvas) return;
+
+    try {
+      if (!canvas.hasPointerCapture || canvas.hasPointerCapture(pointerId)) {
+        canvas.releasePointerCapture(pointerId);
+      }
+    } catch {
+      // Pointer capture may already be gone after cancellation or platform gestures.
+    }
   }
 
   function zoomAt(clientX: number, clientY: number, factor: number) {
@@ -708,6 +866,7 @@
         onpointerdown={handlePointerDown}
         onpointermove={handlePointerMove}
         onpointerup={handlePointerUp}
+        onpointercancel={handlePointerCancel}
         onpointerleave={handlePointerLeave}
         onwheel={handleWheel}
         oncontextmenu={handleContextMenu}
@@ -762,59 +921,59 @@
         </div>
       </div>
 
-      <div class="pointer-events-auto flex w-full flex-col items-stretch gap-2 sm:w-auto">
-        <div class="glass-panel border-transparent px-4 py-3 text-sm ring-0">
-          <div class="font-medium text-gray-900">Прогресс: {progressPercent}%</div>
-          <div class="text-xs text-gray-500">{completedStitchIds.size} / {totalStitches} крестиков</div>
+      <div class="pointer-events-auto flex w-full flex-col items-stretch gap-2 sm:w-[22rem]">
+        <div class="glass-panel border-transparent px-4 py-3 text-right text-sm ring-0">
+          <div class="font-medium text-gray-900">Прогресс: {progressPercent}% · {completedStitchIds.size} / {totalStitches} крестиков</div>
           <div class="mt-1 text-xs text-gray-500">Время: {formatElapsedTime(totalElapsedSeconds)}</div>
         </div>
-        <button
-          type="button"
-          class="glass-panel border-transparent px-4 py-3 text-sm font-medium text-gray-700 ring-0 hover:bg-white/90"
-          aria-expanded={isPaletteOpen}
-          onclick={() => (isPaletteOpen = !isPaletteOpen)}
-        >
-          {isPaletteOpen ? 'Закрыть палитру' : 'Палитра ниток'}
-        </button>
-      </div>
-    </div>
-
-    {#if isPaletteOpen}
-      <aside class="glass-panel absolute bottom-20 right-4 top-28 z-20 flex w-[22rem] max-w-[calc(100vw-2rem)] flex-col border-transparent ring-0">
-        <div class="flex items-center justify-between gap-3 border-b border-violet-100/25 px-4 py-3">
-          <h2 class="text-sm font-bold uppercase tracking-wider text-gray-700">Палитра {getThreadPaletteLabel()}</h2>
+        {#if isPaletteOpen}
+          <section
+            class="glass-panel palette-transform flex max-h-[calc(100vh-9rem)] flex-col border-transparent ring-0"
+          >
+            <div class="flex items-center justify-between gap-3 border-b border-violet-100/25 px-4 py-3">
+              <h2 class="text-sm font-bold uppercase tracking-wider text-gray-700">Палитра {getThreadPaletteLabel()}</h2>
+              <button
+                type="button"
+                class="rounded-lg bg-white/35 px-2 py-1 text-sm font-medium text-violet-700 ring-1 ring-violet-100/80 hover:bg-white/60"
+                onclick={() => (isPaletteOpen = false)}
+              >
+                Закрыть
+              </button>
+            </div>
+            <ul class="min-h-0 flex-1 space-y-2 overflow-y-auto p-4">
+              {#each pattern.palette as color}
+                <li class="flex items-center justify-between gap-3 text-sm">
+                  <span class="flex min-w-0 items-center gap-3">
+                    <span class="h-6 w-6 shrink-0 rounded-full border border-gray-300 shadow-sm" style="background-color: {color.hex}"></span>
+                    <span class="min-w-0">
+                      <span class="font-mono">{color.code ?? color.name}</span>
+                      <span class="block truncate text-xs text-gray-500">{color.name}</span>
+                    </span>
+                  </span>
+                  <a
+                    href={getOzonSearchUrl(color)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="shrink-0 rounded-lg bg-white/35 px-2 py-1 text-xs font-medium text-violet-700 ring-1 ring-violet-100/80 hover:bg-white/60"
+                  >
+                    Купить
+                  </a>
+                </li>
+              {/each}
+            </ul>
+          </section>
+        {:else}
           <button
             type="button"
-            class="rounded-lg px-2 py-1 text-sm text-gray-500 hover:bg-gray-100 hover:text-gray-900"
-            aria-label="Закрыть палитру"
-            onclick={() => (isPaletteOpen = false)}
+            class="glass-panel palette-transform border-transparent bg-white/35 px-4 py-3 text-sm font-medium text-violet-700 ring-1 ring-violet-100/80 hover:bg-white/60"
+            aria-expanded="false"
+            onclick={() => (isPaletteOpen = true)}
           >
-            Закрыть
+            Палитра ниток
           </button>
-        </div>
-        <ul class="min-h-0 flex-1 space-y-2 overflow-y-auto p-4">
-          {#each pattern.palette as color}
-            <li class="flex items-center justify-between gap-3 text-sm">
-              <span class="flex min-w-0 items-center gap-3">
-                <span class="h-6 w-6 shrink-0 rounded-full border border-gray-300 shadow-sm" style="background-color: {color.hex}"></span>
-                <span class="min-w-0">
-                  <span class="font-mono">{color.code ?? color.name}</span>
-                  <span class="block truncate text-xs text-gray-500">{color.name}</span>
-                </span>
-              </span>
-              <a
-                href={getOzonSearchUrl(color)}
-                target="_blank"
-                rel="noopener noreferrer"
-                class="shrink-0 rounded-lg bg-white/35 px-2 py-1 text-xs font-medium text-violet-700 ring-1 ring-violet-100/80 hover:bg-white/60"
-              >
-                Купить
-              </a>
-            </li>
-          {/each}
-        </ul>
-      </aside>
-    {/if}
+        {/if}
+      </div>
+    </div>
 
     <div class="glass-panel absolute bottom-4 right-4 z-20 border-transparent px-3 py-3 text-xs ring-0">
       {#if isSaving}

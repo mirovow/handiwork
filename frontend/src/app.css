@@ -54,4 +54,21 @@ body {
   .glass-button-danger {
     @apply inline-flex items-center justify-center rounded-xl bg-red-50/80 text-red-700 shadow-sm ring-1 ring-red-100 backdrop-blur-xl transition hover:bg-red-100 disabled:bg-gray-100 disabled:text-gray-400;
   }
+
+  .palette-transform {
+    animation: palette-pop 180ms ease-out;
+    transform-origin: top right;
+  }
+}
+
+@keyframes palette-pop {
+  from {
+    opacity: 0.35;
+    transform: scale(0.96);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
