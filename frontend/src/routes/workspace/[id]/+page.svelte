@@ -1,7 +1,7 @@
 <script lang="ts">
   import { page } from '$app/stores';
   import { api, type CompletedStitch } from '$lib/api';
-  import { calculateProgressPercent, countTotalStitches } from '$lib/progress';
+  import { calculateProgressPercent, countTotalStitches, formatProgressPercent } from '$lib/progress';
   import { buildThreadPurchaseUrl, getCellThreadColor, type ThreadColor } from '$lib/thread-color';
   import { formatElapsedTime } from '$lib/time';
   import { onMount, tick } from 'svelte';
@@ -67,8 +67,17 @@
   const maxScale = 6;
   const maxStaticLayerPixels = 16_000_000;
   const timeFlushIntervalSeconds = 1;
+  const majorGridStep = 10;
+  const sectionSize = 50;
+  const rulerHeight = 24;
+  const rulerWidth = 32;
+  const minimapMaxWidth = 128;
+  const minimapMaxHeight = 96;
+  const minimapRenderCellLimit = 6000;
+  const desktopSidePanelWidth = 384;
   const totalStitches = $derived(countTotalStitches(pattern));
   const progressPercent = $derived(calculateProgressPercent(completedStitchIds.size, totalStitches));
+  const isPatternComplete = $derived(totalStitches > 0 && completedStitchIds.size >= totalStitches);
   const totalElapsedSeconds = $derived(persistedElapsedSeconds + sessionElapsedSeconds);
   const tooltipPatternCell = $derived(threadTooltipCell ? getCellAt(threadTooltipCell.x, threadTooltipCell.y) : null);
   const tooltipThreadColor = $derived(getCellThreadColor(tooltipPatternCell, pattern?.palette ?? []));
@@ -151,6 +160,17 @@
     scheduleDraw();
   });
 
+  $effect(() => {
+    if (isPatternComplete) {
+      stopSessionTimer();
+      return;
+    }
+
+    if (!loading && pattern?.schemaVersion === 2 && !timerInterval && !sessionStartedAt) {
+      startSessionTimer();
+    }
+  });
+
   function getPrimaryStitch(cell: PatternCell) {
     return cell.stitches[0];
   }
@@ -189,6 +209,12 @@
   }
 
   function startSessionTimer() {
+    if (isPatternComplete) {
+      sessionStartedAt = 0;
+      sessionElapsedSeconds = 0;
+      return;
+    }
+
     sessionStartedAt = Date.now();
     persistedSessionSeconds = 0;
     sessionElapsedSeconds = 0;
@@ -201,6 +227,29 @@
         void persistSessionTime();
       }
     }, 1000);
+  }
+
+  function stopSessionTimer() {
+    if (timerInterval) {
+      clearInterval(timerInterval);
+      timerInterval = null;
+    }
+
+    if (!sessionStartedAt) return;
+
+    const completedSessionSeconds = Math.floor((Date.now() - sessionStartedAt) / 1000);
+    const unpersistedSeconds = getUnpersistedSessionSeconds();
+    persistedElapsedSeconds += Math.max(0, completedSessionSeconds);
+    sessionElapsedSeconds = 0;
+    sessionStartedAt = 0;
+    persistedSessionSeconds = 0;
+    writeStoredElapsedSeconds(persistedElapsedSeconds);
+
+    if (unpersistedSeconds > 0) {
+      void api.addProgressTime(patternId, unpersistedSeconds).catch((e) => {
+        console.error('Failed to save final stitching time', e);
+      });
+    }
   }
 
   function getUnpersistedSessionSeconds() {
@@ -324,8 +373,11 @@
     }
     drawCompletedMarkers(context, visibleRange);
     drawGrid(context, visibleRange);
+    drawSectionBoundaries(context, visibleRange);
+    drawCenterGuide(context);
     drawHover(context);
     context.restore();
+    drawCoordinateRulers(context, visibleRange, rect);
   }
 
   function ensureCanvasSize(rect: DOMRect) {
@@ -545,6 +597,109 @@
     }
 
     context.stroke();
+
+    context.strokeStyle = '#6b7280';
+    context.lineWidth = 1.4 / viewScale;
+    context.beginPath();
+
+    const firstMajorX = Math.max(0, Math.ceil(visibleRange.startX / majorGridStep) * majorGridStep);
+    for (let x = firstMajorX; x <= visibleRange.endX + 1; x += majorGridStep) {
+      const position = x * cellSize;
+      context.moveTo(position, 0);
+      context.lineTo(position, height);
+    }
+
+    const firstMajorY = Math.max(0, Math.ceil(visibleRange.startY / majorGridStep) * majorGridStep);
+    for (let y = firstMajorY; y <= visibleRange.endY + 1; y += majorGridStep) {
+      const position = y * cellSize;
+      context.moveTo(0, position);
+      context.lineTo(width, position);
+    }
+
+    context.stroke();
+    context.restore();
+  }
+
+  function drawSectionBoundaries(context: CanvasRenderingContext2D, visibleRange: VisibleRange) {
+    const width = pattern.settings.width * cellSize;
+    const height = pattern.settings.height * cellSize;
+    context.save();
+    context.strokeStyle = '#7c3aed';
+    context.lineWidth = 2 / viewScale;
+    context.setLineDash([6 / viewScale, 4 / viewScale]);
+    context.beginPath();
+
+    const firstSectionX = Math.max(sectionSize, Math.ceil(visibleRange.startX / sectionSize) * sectionSize);
+    for (let x = firstSectionX; x < pattern.settings.width; x += sectionSize) {
+      const position = x * cellSize;
+      context.moveTo(position, 0);
+      context.lineTo(position, height);
+    }
+
+    const firstSectionY = Math.max(sectionSize, Math.ceil(visibleRange.startY / sectionSize) * sectionSize);
+    for (let y = firstSectionY; y < pattern.settings.height; y += sectionSize) {
+      const position = y * cellSize;
+      context.moveTo(0, position);
+      context.lineTo(width, position);
+    }
+
+    context.stroke();
+    context.restore();
+  }
+
+  function drawCenterGuide(context: CanvasRenderingContext2D) {
+    const centerX = getPatternCenterGridX() * cellSize;
+    const centerY = getPatternCenterGridY() * cellSize;
+    const width = pattern.settings.width * cellSize;
+    const height = pattern.settings.height * cellSize;
+
+    context.save();
+    context.strokeStyle = '#db2777';
+    context.lineWidth = 2 / viewScale;
+    context.setLineDash([3 / viewScale, 5 / viewScale]);
+    context.beginPath();
+    context.moveTo(centerX, 0);
+    context.lineTo(centerX, height);
+    context.moveTo(0, centerY);
+    context.lineTo(width, centerY);
+    context.stroke();
+    context.restore();
+  }
+
+  function drawCoordinateRulers(context: CanvasRenderingContext2D, visibleRange: VisibleRange, rect: DOMRect) {
+    context.save();
+    context.fillStyle = 'rgba(255, 255, 255, 0.82)';
+    context.fillRect(0, 0, rect.width, rulerHeight);
+    context.fillRect(0, 0, rulerWidth, rect.height);
+    context.strokeStyle = 'rgba(107, 114, 128, 0.45)';
+    context.lineWidth = 1;
+    context.beginPath();
+    context.moveTo(0, rulerHeight);
+    context.lineTo(rect.width, rulerHeight);
+    context.moveTo(rulerWidth, 0);
+    context.lineTo(rulerWidth, rect.height);
+    context.stroke();
+
+    context.fillStyle = '#374151';
+    context.font = '10px sans-serif';
+    context.textAlign = 'center';
+    context.textBaseline = 'middle';
+
+    const firstMajorX = Math.max(0, Math.ceil(visibleRange.startX / majorGridStep) * majorGridStep);
+    for (let x = firstMajorX; x <= visibleRange.endX + 1; x += majorGridStep) {
+      const screenX = offsetX + x * cellSize * viewScale;
+      if (screenX < rulerWidth || screenX > rect.width) continue;
+      context.fillText(String(x), screenX, rulerHeight / 2);
+    }
+
+    context.textAlign = 'right';
+    const firstMajorY = Math.max(0, Math.ceil(visibleRange.startY / majorGridStep) * majorGridStep);
+    for (let y = firstMajorY; y <= visibleRange.endY + 1; y += majorGridStep) {
+      const screenY = offsetY + y * cellSize * viewScale;
+      if (screenY < rulerHeight || screenY > rect.height) continue;
+      context.fillText(String(y), rulerWidth - 6, screenY);
+    }
+
     context.restore();
   }
 
@@ -823,21 +978,143 @@
     zoomAt(rect.left + rect.width / 2, rect.top + rect.height / 2, factor);
   }
 
+  function focusPatternCenter() {
+    if (!canvas || !pattern) return;
+
+    const rect = canvas.getBoundingClientRect();
+    centerViewOnWorld(getPatternCenterGridX() * cellSize, getPatternCenterGridY() * cellSize, rect);
+  }
+
+  function centerViewOnWorld(worldX: number, worldY: number, rect: DOMRect) {
+    const viewCenter = getUsableViewCenter(rect);
+    offsetX = viewCenter.x - worldX * viewScale;
+    offsetY = viewCenter.y - worldY * viewScale;
+  }
+
+  function getUsableViewCenter(rect: DOMRect) {
+    const usableWidth = getUsableCanvasWidth(rect);
+    return {
+      x: usableWidth / 2,
+      y: rect.height / 2,
+    };
+  }
+
+  function getUsableCanvasWidth(rect: DOMRect) {
+    if (rect.width < 768) return rect.width;
+
+    return Math.max(360, rect.width - desktopSidePanelWidth);
+  }
+
   function resetView() {
     if (!canvas) return;
 
     const rect = canvas.getBoundingClientRect();
+    const usableWidth = getUsableCanvasWidth(rect);
     const patternWidth = pattern.settings.width * cellSize;
     const patternHeight = pattern.settings.height * cellSize;
     const fitScale = Math.min(
       1,
-      (rect.width - 48) / patternWidth,
+      (usableWidth - 48) / patternWidth,
       (rect.height - 48) / patternHeight,
     );
 
     viewScale = Math.max(minScale, fitScale);
-    offsetX = Math.max(24, (rect.width - patternWidth * viewScale) / 2);
+    offsetX = Math.max(24, (usableWidth - patternWidth * viewScale) / 2);
     offsetY = Math.max(24, (rect.height - patternHeight * viewScale) / 2);
+  }
+
+  function getPatternCenterLabel() {
+    return `${getPatternCenterGridX()} x ${getPatternCenterGridY()}`;
+  }
+
+  function getPatternCenterGridX() {
+    return Math.ceil(pattern.settings.width / 2);
+  }
+
+  function getPatternCenterGridY() {
+    return Math.ceil(pattern.settings.height / 2);
+  }
+
+  function getMinimapDimensions() {
+    const patternWidth = pattern.settings.width;
+    const patternHeight = pattern.settings.height;
+    const scale = Math.min(minimapMaxWidth / patternWidth, minimapMaxHeight / patternHeight);
+
+    return {
+      width: Math.max(36, Math.round(patternWidth * scale)),
+      height: Math.max(36, Math.round(patternHeight * scale)),
+    };
+  }
+
+  function getMinimapStyle() {
+    const { width, height } = getMinimapDimensions();
+    return `width: ${width}px; height: ${height}px;`;
+  }
+
+  function getMinimapViewportBox() {
+    if (!canvas || !pattern) {
+      return { x: 0, y: 0, width: pattern.settings.width, height: pattern.settings.height };
+    }
+
+    const rect = canvas.getBoundingClientRect();
+    const patternWidth = pattern.settings.width * cellSize;
+    const patternHeight = pattern.settings.height * cellSize;
+    const visibleLeft = Math.min(patternWidth, Math.max(0, -offsetX / viewScale));
+    const visibleTop = Math.min(patternHeight, Math.max(0, -offsetY / viewScale));
+    const visibleRight = Math.min(patternWidth, Math.max(0, (rect.width - offsetX) / viewScale));
+    const visibleBottom = Math.min(patternHeight, Math.max(0, (rect.height - offsetY) / viewScale));
+
+    return {
+      x: visibleLeft / cellSize,
+      y: visibleTop / cellSize,
+      width: Math.max(0.5, (visibleRight - visibleLeft) / cellSize),
+      height: Math.max(0.5, (visibleBottom - visibleTop) / cellSize),
+    };
+  }
+
+  function getMinimapCenterStyle() {
+    return [
+      `left: ${(0.5 * 100).toFixed(2)}%`,
+      `top: ${(0.5 * 100).toFixed(2)}%`,
+    ].join('; ');
+  }
+
+  function handleMinimapClick(event: MouseEvent & { currentTarget: HTMLButtonElement }) {
+    if (!canvas || !pattern) return;
+
+    const minimapRect = event.currentTarget.getBoundingClientRect();
+    const patternWorldWidth = pattern.settings.width * cellSize;
+    const patternWorldHeight = pattern.settings.height * cellSize;
+    const ratioX = Math.min(1, Math.max(0, (event.clientX - minimapRect.left) / minimapRect.width));
+    const ratioY = Math.min(1, Math.max(0, (event.clientY - minimapRect.top) / minimapRect.height));
+
+    centerViewOnWorld(ratioX * patternWorldWidth, ratioY * patternWorldHeight, canvas.getBoundingClientRect());
+  }
+
+  function getMinimapCells() {
+    const totalCells = pattern.settings.width * pattern.settings.height;
+    const sampleStep = Math.max(1, Math.ceil(Math.sqrt(totalCells / minimapRenderCellLimit)));
+    const cells: Array<{ x: number; y: number; width: number; height: number; color: string }> = [];
+
+    for (let y = 0; y < pattern.settings.height; y += sampleStep) {
+      const row = pattern.patternData[y] as PatternCell[] | undefined;
+      if (!row) continue;
+
+      for (let x = 0; x < pattern.settings.width; x += sampleStep) {
+        const cell = row[x];
+        if (!cell || !getPrimaryStitch(cell)) continue;
+
+        cells.push({
+          x: cell.x,
+          y: cell.y,
+          width: Math.min(sampleStep, pattern.settings.width - cell.x),
+          height: Math.min(sampleStep, pattern.settings.height - cell.y),
+          color: getColorHex(cell),
+        });
+      }
+    }
+
+    return cells;
   }
 </script>
 
@@ -910,7 +1187,7 @@
       </div>
     {/if}
 
-    <div class="pointer-events-none absolute left-4 right-4 top-4 z-20 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+    <div class="pointer-events-none absolute left-12 right-4 top-9 z-20 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
       <div class="glass-panel pointer-events-auto flex flex-wrap items-center gap-2 border-transparent p-2 text-sm ring-0">
         <a href="/gallery" class="rounded-lg px-3 py-2 font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900">&larr; В галерею</a>
         <a href="/" class="rounded-lg bg-white/35 px-3 py-2 font-medium text-violet-700 ring-1 ring-violet-100/80 hover:bg-white/60">Новая схема</a>
@@ -918,12 +1195,14 @@
         <div class="px-2 text-gray-700">
           <span class="font-medium text-gray-900">Схема</span>
           <span class="text-gray-500">({pattern.settings.width}x{pattern.settings.height})</span>
+          <span class="ml-2 text-gray-500">Центр: {getPatternCenterLabel()}</span>
+          <span class="ml-2 text-gray-500">Секции: {sectionSize} x {sectionSize}</span>
         </div>
       </div>
 
       <div class="pointer-events-auto flex w-full flex-col items-stretch gap-2 sm:w-[22rem]">
         <div class="glass-panel border-transparent px-4 py-3 text-right text-sm ring-0">
-          <div class="font-medium text-gray-900">Прогресс: {progressPercent}% · {completedStitchIds.size} / {totalStitches} крестиков</div>
+          <div class="font-medium text-gray-900">Прогресс: {formatProgressPercent(progressPercent)}% · {completedStitchIds.size} / {totalStitches} крестиков</div>
           <div class="mt-1 text-xs text-gray-500">Время: {formatElapsedTime(totalElapsedSeconds)}</div>
         </div>
         {#if isPaletteOpen}
@@ -975,15 +1254,62 @@
       </div>
     </div>
 
-    <div class="glass-panel absolute bottom-4 right-4 z-20 border-transparent px-3 py-3 text-xs ring-0">
-      {#if isSaving}
-        <span class="text-yellow-600">Сохранение...</span>
-      {:else}
-        <span class="text-green-600">Сохранено</span>
-      {/if}
+    {#if isPatternComplete}
+      <div class="pointer-events-none absolute inset-x-4 top-28 z-30 flex justify-center">
+        <div class="completion-celebration glass-panel relative overflow-hidden border-transparent px-6 py-5 text-center ring-0">
+          <div class="completion-confetti" aria-hidden="true">
+            <span></span>
+            <span></span>
+            <span></span>
+            <span></span>
+            <span></span>
+            <span></span>
+          </div>
+          <h2 class="text-lg font-bold text-gray-950">Ты умничка!</h2>
+          <p class="mt-2 text-sm text-gray-600">Время вышивки: {formatElapsedTime(totalElapsedSeconds)}</p>
+        </div>
+      </div>
+    {/if}
+
+    <div class="glass-panel absolute bottom-4 right-4 z-20 border-transparent p-2 text-xs ring-0">
+      <button
+        type="button"
+        class="relative block overflow-hidden border border-white/70 bg-white/55 shadow-inner"
+        style={getMinimapStyle()}
+        aria-label="Перейти по мини-карте"
+        onclick={handleMinimapClick}
+      >
+        <svg
+          class="h-full w-full"
+          role="img"
+          aria-label="Мини-карта схемы"
+          viewBox={`0 0 ${pattern.settings.width} ${pattern.settings.height}`}
+          preserveAspectRatio="none"
+        >
+          <rect width={pattern.settings.width} height={pattern.settings.height} fill="#ffffff" />
+          {#each getMinimapCells() as cell}
+            <rect x={cell.x} y={cell.y} width={cell.width} height={cell.height} fill={cell.color} />
+          {/each}
+          <line x1={getPatternCenterGridX()} y1="0" x2={getPatternCenterGridX()} y2={pattern.settings.height} stroke="#db2777" stroke-width="0.35" stroke-dasharray="1 1" />
+          <line x1="0" y1={getPatternCenterGridY()} x2={pattern.settings.width} y2={getPatternCenterGridY()} stroke="#db2777" stroke-width="0.35" stroke-dasharray="1 1" />
+          <rect
+            x={getMinimapViewportBox().x}
+            y={getMinimapViewportBox().y}
+            width={getMinimapViewportBox().width}
+            height={getMinimapViewportBox().height}
+            fill="rgba(124, 58, 237, 0.16)"
+            stroke="#7c3aed"
+            stroke-width="0.7"
+          />
+        </svg>
+        <span class="absolute h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-pink-500 ring-2 ring-white" style={getMinimapCenterStyle()} aria-hidden="true"></span>
+      </button>
     </div>
 
-    <div class="glass-panel absolute bottom-4 left-4 z-20 flex items-center gap-2 border-transparent p-2 text-xs ring-0">
+    <div
+      class="glass-panel absolute bottom-4 left-12 z-20 flex items-center gap-2 border-transparent p-2 text-xs ring-0"
+      aria-label="Навигация по схеме"
+    >
       <button
         type="button"
         class="rounded-lg bg-white/35 px-3 py-2 font-medium text-violet-700 ring-1 ring-violet-100/80 hover:bg-white/60"
@@ -1005,7 +1331,20 @@
       >
         Сброс
       </button>
+      <button
+        type="button"
+        class="rounded-lg bg-white/30 px-3 py-2 font-medium text-gray-700 ring-1 ring-white/50 hover:bg-white/55"
+        onclick={focusPatternCenter}
+      >
+        К центру
+      </button>
       <span class="px-2 text-gray-500">{Math.round(viewScale * 100)}%</span>
+      <span class="h-6 w-px bg-gray-200" aria-hidden="true"></span>
+      {#if isSaving}
+        <span class="rounded-lg bg-white/30 px-3 py-2 font-medium text-yellow-600 ring-1 ring-white/50">Сохранение...</span>
+      {:else}
+        <span class="rounded-lg bg-white/30 px-3 py-2 font-medium text-green-600 ring-1 ring-white/50">Сохранено</span>
+      {/if}
     </div>
   {/if}
 </div>

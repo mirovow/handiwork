@@ -1,6 +1,12 @@
 <script lang="ts">
   import { api } from '$lib/api';
+  import { calculateProgressPercent, countTotalStitches, formatProgressPercent } from '$lib/progress';
+  import { formatElapsedTime } from '$lib/time';
   import { onMount } from 'svelte';
+
+  type PatternCellLike = {
+    stitches?: unknown[];
+  };
 
   type GalleryPattern = {
     id: string;
@@ -9,17 +15,28 @@
       width: number;
       height: number;
     };
+    patternData?: PatternCellLike[][];
+    backstitches?: unknown[];
+    knots?: unknown[];
     createdAt: string;
   };
 
+  type GalleryProgress = {
+    completedStitches?: unknown[];
+    elapsedSeconds?: number;
+  };
+
   let patterns = $state<GalleryPattern[]>([]);
+  let progressByPatternId = $state<Record<string, GalleryProgress | null>>({});
   let isLoading = $state(true);
   let error = $state('');
   let deletingPatternId = $state<string | null>(null);
 
   onMount(async () => {
     try {
-      patterns = await api.getPatterns();
+      const loadedPatterns = await api.getPatterns();
+      patterns = loadedPatterns;
+      progressByPatternId = await loadProgressByPatternId(loadedPatterns);
     } catch (e) {
       error = e instanceof Error ? e.message : 'Неизвестная ошибка';
     } finally {
@@ -36,11 +53,41 @@
       deletingPatternId = patternId;
       await api.deletePattern(patternId);
       patterns = patterns.filter((pattern) => pattern.id !== patternId);
+      const { [patternId]: _deletedProgress, ...remainingProgress } = progressByPatternId;
+      progressByPatternId = remainingProgress;
     } catch (e) {
       error = e instanceof Error ? e.message : 'Не удалось удалить схему';
     } finally {
       deletingPatternId = null;
     }
+  }
+
+  async function loadProgressByPatternId(patternsToLoad: GalleryPattern[]) {
+    const progressEntries = await Promise.all(
+      patternsToLoad.map(async (pattern) => {
+        try {
+          return [pattern.id, await api.getProgress(pattern.id)] as const;
+        } catch {
+          return [pattern.id, null] as const;
+        }
+      }),
+    );
+
+    return Object.fromEntries(progressEntries);
+  }
+
+  function getPatternProgress(pattern: GalleryPattern) {
+    const progress = progressByPatternId[pattern.id];
+    const totalStitches = countTotalStitches(pattern);
+    const completedStitches = progress?.completedStitches?.length ?? 0;
+
+    return {
+      completedStitches,
+      elapsedSeconds: progress?.elapsedSeconds ?? 0,
+      isComplete: totalStitches > 0 && completedStitches >= totalStitches,
+      percent: calculateProgressPercent(completedStitches, totalStitches),
+      totalStitches,
+    };
   }
 </script>
 
@@ -69,8 +116,17 @@
     {#if patterns && patterns.length > 0}
       <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
         {#each patterns as pattern}
+          {@const patternProgress = getPatternProgress(pattern)}
           <div class="glass-card flex flex-col overflow-hidden transition hover:-translate-y-0.5 hover:bg-white/55">
-            <div class="aspect-w-1 aspect-h-1 w-full bg-white/20">
+            <div class="aspect-w-1 aspect-h-1 relative w-full bg-white/20">
+              {#if patternProgress.isComplete}
+                <span
+                  class="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-full bg-emerald-500 text-sm font-bold text-white shadow-lg shadow-emerald-500/30"
+                  aria-label="Схема завершена"
+                >
+                  ✓
+                </span>
+              {/if}
               <!-- Using the pattern image path as preview -->
               <img src={api.getImageUrl(pattern.patternImagePath)} alt="Preview" class="w-full h-48 object-cover" />
             </div>
@@ -82,6 +138,10 @@
                 <p class="text-xs text-gray-500 mb-4">
                   Создана: {new Date(pattern.createdAt).toLocaleDateString('ru-RU')}
                 </p>
+                <div class="mb-4 rounded-2xl bg-white/30 px-3 py-2 text-xs text-gray-600 ring-1 ring-white/40">
+                  <p class="font-medium text-gray-800">Прогресс: {formatProgressPercent(patternProgress.percent)}%</p>
+                  <p>Время: {formatElapsedTime(patternProgress.elapsedSeconds)}</p>
+                </div>
               </div>
               <div class="flex items-center gap-2">
                 <a href={`/workspace/${pattern.id}`} class="glass-button-soft flex-1">

@@ -59,6 +59,45 @@ body {
     animation: palette-pop 180ms ease-out;
     transform-origin: top right;
   }
+
+  .completion-celebration {
+    animation: completion-pop 280ms ease-out;
+  }
+
+  .completion-confetti span {
+    @apply absolute h-2 w-2 rounded-full;
+    animation: confetti-burst 900ms ease-out infinite;
+  }
+
+  .completion-confetti span:nth-child(1) {
+    @apply left-8 top-4 bg-violet-400;
+    animation-delay: 0ms;
+  }
+
+  .completion-confetti span:nth-child(2) {
+    @apply right-10 top-5 bg-emerald-400;
+    animation-delay: 120ms;
+  }
+
+  .completion-confetti span:nth-child(3) {
+    @apply left-16 bottom-5 bg-pink-400;
+    animation-delay: 220ms;
+  }
+
+  .completion-confetti span:nth-child(4) {
+    @apply right-16 bottom-6 bg-amber-300;
+    animation-delay: 340ms;
+  }
+
+  .completion-confetti span:nth-child(5) {
+    @apply left-1/2 top-3 bg-sky-300;
+    animation-delay: 460ms;
+  }
+
+  .completion-confetti span:nth-child(6) {
+    @apply bottom-4 right-1/2 bg-fuchsia-300;
+    animation-delay: 580ms;
+  }
 }
 
 @keyframes palette-pop {
@@ -70,5 +109,33 @@ body {
   to {
     opacity: 1;
     transform: scale(1);
+  }
+}
+
+@keyframes completion-pop {
+  from {
+    opacity: 0;
+    transform: translateY(-0.5rem) scale(0.96);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes confetti-burst {
+  0% {
+    opacity: 0;
+    transform: translateY(0) scale(0.7) rotate(0deg);
+  }
+
+  30% {
+    opacity: 1;
+  }
+
+  100% {
+    opacity: 0;
+    transform: translateY(-1.25rem) scale(1.15) rotate(180deg);
   }
 }

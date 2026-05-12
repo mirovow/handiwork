@@ -71,8 +71,28 @@ function dispatchPointerEvent(
 	return fireEvent(element, event);
 }
 
+function createPattern(width: number, height: number) {
+	return {
+		id: 'pattern-1',
+		schemaVersion: 2,
+		settings: { width, height, threadPalette: 'DMC' },
+		palette: [{ manufacturer: 'DMC', code: '743', name: 'Yellow Medium', hex: '#f8c85a' }],
+		patternData: Array.from({ length: height }, (_, y) =>
+			Array.from({ length: width }, (_, x) => ({
+				x,
+				y,
+				stitches: [{ id: `stitch-${x}-${y}`, kind: 'full_cross', threadCode: '743' }]
+			}))
+		),
+		backstitches: [],
+		knots: []
+	};
+}
+
 describe('workspace page', () => {
 	beforeEach(() => {
+		vi.clearAllMocks();
+		window.localStorage.clear();
 		vi.stubGlobal('ResizeObserver', ResizeObserverMock);
 		vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null);
 		HTMLCanvasElement.prototype.setPointerCapture ??= () => {};
@@ -94,6 +114,7 @@ describe('workspace page', () => {
 
 	afterEach(() => {
 		cleanup();
+		vi.useRealTimers();
 		vi.restoreAllMocks();
 		vi.unstubAllGlobals();
 	});
@@ -102,7 +123,7 @@ describe('workspace page', () => {
 		render(WorkspacePage);
 
 		const paletteButton = await screen.findByRole('button', { name: 'Палитра ниток' });
-		expect(screen.getByText('Прогресс: 0% · 0 / 1 крестиков')).toBeTruthy();
+		expect(screen.getByText('Прогресс: 0.0% · 0 / 1 крестиков')).toBeTruthy();
 		expect(paletteButton.className).toContain('hover:bg-white/60');
 
 		await fireEvent.click(paletteButton);
@@ -119,10 +140,40 @@ describe('workspace page', () => {
 		expect(screen.queryByRole('heading', { name: 'Палитра DMC' })).toBeNull();
 	});
 
+	it('shows paper-like navigation controls for large patterns', async () => {
+		vi.mocked(api.getPattern).mockResolvedValueOnce(createPattern(40, 33));
+		render(WorkspacePage);
+
+		await screen.findByText('Прогресс: 0.0% · 0 / 1320 крестиков');
+
+		expect(screen.getByText('Центр: 20 x 17')).toBeTruthy();
+		expect(screen.getByText('Секции: 50 x 50')).toBeTruthy();
+		expect(screen.getByRole('img', { name: 'Мини-карта схемы' })).toBeTruthy();
+		expect(screen.queryByText('Мини-карта')).toBeNull();
+		expect(screen.queryByText('Цветная схема и текущая область')).toBeNull();
+		expect(screen.getByRole('button', { name: 'Перейти по мини-карте' }).className).not.toContain(
+			'rounded'
+		);
+		expect(screen.getByRole('button', { name: 'К центру' })).toBeTruthy();
+		expect(screen.getByLabelText('Навигация по схеме').textContent).toContain('Сохранено');
+	});
+
+	it('renders a color overview in the minimap for very large patterns', async () => {
+		vi.mocked(api.getPattern).mockResolvedValueOnce(createPattern(150, 150));
+		const { container } = render(WorkspacePage);
+
+		await screen.findByText('Прогресс: 0.0% · 0 / 22500 крестиков');
+
+		const colorCells = container.querySelectorAll(
+			'svg[aria-label="Мини-карта схемы"] rect[fill="#f8c85a"]'
+		);
+		expect(colorCells.length).toBeGreaterThan(0);
+	});
+
 	it('toggles a stitch with a single touch tap', async () => {
 		const { container } = render(WorkspacePage);
 
-		await screen.findByText('Прогресс: 0% · 0 / 1 крестиков');
+		await screen.findByText('Прогресс: 0.0% · 0 / 1 крестиков');
 		const canvas = container.querySelector('canvas');
 		expect(canvas).toBeTruthy();
 
@@ -130,14 +181,83 @@ describe('workspace page', () => {
 		await dispatchPointerEvent(canvas!, 'pointerup', { pointerId: 1, clientX: 150, clientY: 150 });
 
 		await waitFor(() => {
-			expect(screen.getByText('Прогресс: 100% · 1 / 1 крестиков')).toBeTruthy();
+			expect(screen.getByText('Прогресс: 100.0% · 1 / 1 крестиков')).toBeTruthy();
 		});
+		expect(screen.getByText('Ты умничка!')).toBeTruthy();
+		expect(screen.getByText('Время вышивки: 0с')).toBeTruthy();
+	});
+
+	it('freezes elapsed time after completing the pattern', async () => {
+		vi.useFakeTimers();
+		vi.setSystemTime(new Date('2026-05-11T00:00:00.000Z'));
+		const { container } = render(WorkspacePage);
+
+		await screen.findByText('Прогресс: 0.0% · 0 / 1 крестиков');
+		const canvas = container.querySelector('canvas');
+		expect(canvas).toBeTruthy();
+
+		await vi.advanceTimersByTimeAsync(3000);
+		await screen.findByText('Время: 3с');
+
+		await dispatchPointerEvent(canvas!, 'pointerdown', { pointerId: 1, clientX: 150, clientY: 150 });
+		await dispatchPointerEvent(canvas!, 'pointerup', { pointerId: 1, clientX: 150, clientY: 150 });
+		await screen.findByText('Время вышивки: 3с');
+
+		await vi.advanceTimersByTimeAsync(5000);
+
+		expect(screen.getByText('Время вышивки: 3с')).toBeTruthy();
+		expect(screen.queryByText('Время вышивки: 8с')).toBeNull();
+	});
+
+	it('does not start the timer when the pattern is already complete on load', async () => {
+		vi.useFakeTimers();
+		vi.setSystemTime(new Date('2026-05-11T00:00:00.000Z'));
+		vi.mocked(api.getProgress).mockResolvedValueOnce({
+			completedStitches: [{ stitchId: 'stitch-1' }],
+			elapsedSeconds: 1583
+		});
+
+		render(WorkspacePage);
+
+		await screen.findByText('Прогресс: 100.0% · 1 / 1 крестиков');
+		await screen.findByText('Время: 26м 23с');
+		await screen.findByText('Время вышивки: 26м 23с');
+
+		await vi.advanceTimersByTimeAsync(5000);
+
+		expect(screen.getByText('Время: 26м 23с')).toBeTruthy();
+		expect(screen.getByText('Время вышивки: 26м 23с')).toBeTruthy();
+		expect(screen.queryByText('Время: 26м 28с')).toBeNull();
+	});
+
+	it('resumes the timer when a completed pattern becomes incomplete again', async () => {
+		vi.useFakeTimers();
+		vi.setSystemTime(new Date('2026-05-11T00:00:00.000Z'));
+		vi.mocked(api.getProgress).mockResolvedValueOnce({
+			completedStitches: [{ stitchId: 'stitch-1' }],
+			elapsedSeconds: 1583
+		});
+		const { container } = render(WorkspacePage);
+
+		await screen.findByText('Прогресс: 100.0% · 1 / 1 крестиков');
+		await screen.findByText('Время: 26м 23с');
+		const canvas = container.querySelector('canvas');
+		expect(canvas).toBeTruthy();
+
+		await dispatchPointerEvent(canvas!, 'pointerdown', { pointerId: 1, clientX: 150, clientY: 150 });
+		await dispatchPointerEvent(canvas!, 'pointerup', { pointerId: 1, clientX: 150, clientY: 150 });
+		await screen.findByText('Прогресс: 0.0% · 0 / 1 крестиков');
+
+		await vi.advanceTimersByTimeAsync(5000);
+
+		expect(screen.getByText('Время: 26м 28с')).toBeTruthy();
+		expect(screen.queryByText('Ты умничка!')).toBeNull();
 	});
 
 	it('pinch-zooms with two touch pointers without toggling a stitch', async () => {
 		const { container } = render(WorkspacePage);
 
-		await screen.findByText('Прогресс: 0% · 0 / 1 крестиков');
+		await screen.findByText('Прогресс: 0.0% · 0 / 1 крестиков');
 		const canvas = container.querySelector('canvas');
 		expect(canvas).toBeTruthy();
 
@@ -150,7 +270,7 @@ describe('workspace page', () => {
 
 		await waitFor(() => {
 			expect(screen.getByText('200%')).toBeTruthy();
-			expect(screen.getByText('Прогресс: 0% · 0 / 1 крестиков')).toBeTruthy();
+			expect(screen.getByText('Прогресс: 0.0% · 0 / 1 крестиков')).toBeTruthy();
 		});
 		expect(api.saveProgress).not.toHaveBeenCalled();
 	});
