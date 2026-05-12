@@ -130,6 +130,7 @@ describe('workspace page', () => {
 
 		await waitFor(() => expect(screen.queryByRole('button', { name: 'Палитра ниток' })).toBeNull());
 		expect(screen.getByRole('heading', { name: 'Палитра DMC' })).toBeTruthy();
+		expect(screen.getByRole('heading', { name: 'Палитра DMC' }).closest('.z-30')).toBeTruthy();
 
 		const closeButton = screen.getByRole('button', { name: 'Закрыть' });
 		expect(closeButton.className).toContain('hover:bg-white/60');
@@ -146,16 +147,35 @@ describe('workspace page', () => {
 
 		await screen.findByText('Прогресс: 0.0% · 0 / 1320 крестиков');
 
-		expect(screen.getByText('Центр: 20 x 17')).toBeTruthy();
-		expect(screen.getByText('Секции: 50 x 50')).toBeTruthy();
+		expect(screen.queryByRole('link', { name: 'Новая схема' })).toBeNull();
+		expect(screen.queryByText('Центр: 20 x 17')).toBeNull();
+		expect(screen.queryByText('Секции: 50 x 50')).toBeNull();
 		expect(screen.getByRole('img', { name: 'Мини-карта схемы' })).toBeTruthy();
 		expect(screen.queryByText('Мини-карта')).toBeNull();
 		expect(screen.queryByText('Цветная схема и текущая область')).toBeNull();
 		expect(screen.getByRole('button', { name: 'Перейти по мини-карте' }).className).not.toContain(
 			'rounded'
 		);
+		expect(screen.queryByRole('button', { name: 'Сброс' })).toBeNull();
 		expect(screen.getByRole('button', { name: 'К центру' })).toBeTruthy();
 		expect(screen.getByLabelText('Навигация по схеме').textContent).toContain('Сохранено');
+	});
+
+	it('shows hovered cell coordinates in the navigation controls', async () => {
+		vi.mocked(api.getPattern).mockResolvedValueOnce(createPattern(40, 33));
+		const { container } = render(WorkspacePage);
+
+		await screen.findByText('Прогресс: 0.0% · 0 / 1320 крестиков');
+		const canvas = container.querySelector('canvas');
+		expect(canvas).toBeTruthy();
+
+		await fireEvent.mouseMove(canvas!, { clientX: 180, clientY: 150 });
+
+		await waitFor(() => {
+			const navigationText = screen.getByLabelText('Навигация по схеме').textContent;
+			expect(navigationText).toMatch(/\d+ x \d+/);
+			expect(navigationText).not.toContain('Координаты');
+		});
 	});
 
 	it('renders a color overview in the minimap for very large patterns', async () => {

@@ -793,6 +793,12 @@
     hoveredCell = getCellFromPointer(event);
   }
 
+  function handleMouseMove(event: MouseEvent) {
+    if (activePointers.size > 0) return;
+
+    hoveredCell = getCellFromPointer(event);
+  }
+
   function handlePointerUp(event: PointerEvent) {
     if (!activePointers.has(event.pointerId)) return;
 
@@ -1142,6 +1148,7 @@
         class="h-full w-full cursor-grab touch-none active:cursor-grabbing"
         onpointerdown={handlePointerDown}
         onpointermove={handlePointerMove}
+        onmousemove={handleMouseMove}
         onpointerup={handlePointerUp}
         onpointercancel={handlePointerCancel}
         onpointerleave={handlePointerLeave}
@@ -1187,16 +1194,13 @@
       </div>
     {/if}
 
-    <div class="pointer-events-none absolute left-12 right-4 top-9 z-20 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+    <div class="pointer-events-none absolute left-12 right-4 top-9 z-30 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
       <div class="glass-panel pointer-events-auto flex flex-wrap items-center gap-2 border-transparent p-2 text-sm ring-0">
         <a href="/gallery" class="rounded-lg px-3 py-2 font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900">&larr; В галерею</a>
-        <a href="/" class="rounded-lg bg-white/35 px-3 py-2 font-medium text-violet-700 ring-1 ring-violet-100/80 hover:bg-white/60">Новая схема</a>
         <div class="hidden h-6 w-px bg-gray-200 sm:block"></div>
         <div class="px-2 text-gray-700">
           <span class="font-medium text-gray-900">Схема</span>
           <span class="text-gray-500">({pattern.settings.width}x{pattern.settings.height})</span>
-          <span class="ml-2 text-gray-500">Центр: {getPatternCenterLabel()}</span>
-          <span class="ml-2 text-gray-500">Секции: {sectionSize} x {sectionSize}</span>
         </div>
       </div>
 
@@ -1327,18 +1331,14 @@
       <button
         type="button"
         class="rounded-lg bg-white/30 px-3 py-2 font-medium text-gray-700 ring-1 ring-white/50 hover:bg-white/55"
-        onclick={resetView}
-      >
-        Сброс
-      </button>
-      <button
-        type="button"
-        class="rounded-lg bg-white/30 px-3 py-2 font-medium text-gray-700 ring-1 ring-white/50 hover:bg-white/55"
         onclick={focusPatternCenter}
       >
         К центру
       </button>
       <span class="px-2 text-gray-500">{Math.round(viewScale * 100)}%</span>
+      {#if hoveredCell}
+        <span class="px-2 text-gray-500">{hoveredCell.x} x {hoveredCell.y}</span>
+      {/if}
       <span class="h-6 w-px bg-gray-200" aria-hidden="true"></span>
       {#if isSaving}
         <span class="rounded-lg bg-white/30 px-3 py-2 font-medium text-yellow-600 ring-1 ring-white/50">Сохранение...</span>
