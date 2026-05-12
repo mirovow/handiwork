@@ -36,6 +36,18 @@
     scale: number;
   };
 
+  type ThreadLegendItem = {
+    color: ThreadColor;
+    threadCode: string;
+    totalStitches: number;
+    completedStitches: number;
+    progressPercent: number;
+  };
+
+  type SortableThreadLegendItem = ThreadLegendItem & {
+    originalIndex: number;
+  };
+
   const patternId = $page.params.id ?? '';
   
   let pattern = $state(null as any);
@@ -53,6 +65,7 @@
   let hoveredCell = $state<{ x: number; y: number } | null>(null);
   let threadTooltipCell = $state<{ x: number; y: number } | null>(null);
   let isPaletteOpen = $state(false);
+  let selectedThreadCode = $state<string | null>(null);
   let interactionMode: InteractionMode = 'idle';
   let didPan = false;
   let panStart = { x: 0, y: 0, offsetX: 0, offsetY: 0 };
@@ -81,6 +94,10 @@
   const totalElapsedSeconds = $derived(persistedElapsedSeconds + sessionElapsedSeconds);
   const tooltipPatternCell = $derived(threadTooltipCell ? getCellAt(threadTooltipCell.x, threadTooltipCell.y) : null);
   const tooltipThreadColor = $derived(getCellThreadColor(tooltipPatternCell, pattern?.palette ?? []));
+  const threadLegendItems = $derived(getThreadLegendItems());
+  const selectedThreadLegendItem = $derived(
+    selectedThreadCode ? threadLegendItems.find((item) => item.threadCode === selectedThreadCode) : null,
+  );
   
   // Debounce saving
   let saveTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -157,6 +174,7 @@
     offsetY;
     hoveredCell;
     threadTooltipCell;
+    selectedThreadCode;
     scheduleDraw();
   });
 
@@ -308,6 +326,53 @@
     return getPrimaryStitch(cell)?.threadCode;
   }
 
+  function getThreadCode(color: ThreadColor) {
+    return color.code ?? color.name;
+  }
+
+  function getThreadLegendItems(): ThreadLegendItem[] {
+    if (!pattern?.palette) return [];
+
+    const stats = new Map<string, { totalStitches: number; completedStitches: number }>();
+    for (const row of pattern.patternData ?? []) {
+      for (const cell of row as PatternCell[]) {
+        for (const stitch of cell.stitches ?? []) {
+          const threadCode = stitch.threadCode;
+          const current = stats.get(threadCode) ?? { totalStitches: 0, completedStitches: 0 };
+          current.totalStitches += 1;
+          if (completedStitchIds.has(stitch.id)) {
+            current.completedStitches += 1;
+          }
+          stats.set(threadCode, current);
+        }
+      }
+    }
+
+    const items: SortableThreadLegendItem[] = pattern.palette.map((color: ThreadColor, index: number) => {
+        const threadCode = getThreadCode(color);
+        const colorStats = stats.get(threadCode) ?? { totalStitches: 0, completedStitches: 0 };
+
+        return {
+          color,
+          threadCode,
+          totalStitches: colorStats.totalStitches,
+          completedStitches: colorStats.completedStitches,
+          progressPercent: calculateProgressPercent(colorStats.completedStitches, colorStats.totalStitches),
+          originalIndex: index,
+        };
+      });
+
+    return items
+      .sort((first, second) => second.totalStitches - first.totalStitches || first.originalIndex - second.originalIndex)
+      .map((item) => ({
+        color: item.color,
+        threadCode: item.threadCode,
+        totalStitches: item.totalStitches,
+        completedStitches: item.completedStitches,
+        progressPercent: item.progressPercent,
+      }));
+  }
+
   function getColorHex(cell: PatternCell) {
     const threadCode = getCellThreadCode(cell);
     if (!threadCode) return 'transparent';
@@ -330,6 +395,10 @@
   function isStitchCompleted(cell: PatternCell) {
     const stitch = getPrimaryStitch(cell);
     return stitch ? completedStitchIds.has(stitch.id) : false;
+  }
+
+  function isCellDimmedByThreadFilter(cell: PatternCell) {
+    return Boolean(selectedThreadCode && getCellThreadCode(cell) !== selectedThreadCode);
   }
 
   function getOzonSearchUrl(color: ThreadColor) {
@@ -403,6 +472,12 @@
   }
 
   function getStaticLayer() {
+    if (selectedThreadCode) {
+      staticLayer = null;
+      staticLayerKey = '';
+      return null;
+    }
+
     const patternWidth = pattern.settings.width * cellSize;
     const patternHeight = pattern.settings.height * cellSize;
     if (patternWidth * patternHeight > maxStaticLayerPixels) {
@@ -472,10 +547,19 @@
 
         const x = cell.x * cellSize;
         const y = cell.y * cellSize;
+        const isDimmed = isCellDimmedByThreadFilter(cell);
+        if (isDimmed) {
+          context.save();
+          context.globalAlpha = 0.18;
+        }
+
         context.fillStyle = getColorHex(cell);
         context.fillRect(x, y, cellSize, cellSize);
         drawStitchSymbol(context, cell, stitch, x, y);
 
+        if (isDimmed) {
+          context.restore();
+        }
       }
     }
   }
@@ -1097,6 +1181,15 @@
     centerViewOnWorld(ratioX * patternWorldWidth, ratioY * patternWorldHeight, canvas.getBoundingClientRect());
   }
 
+  function selectThread(threadCode: string) {
+    selectedThreadCode = selectedThreadCode === threadCode ? null : threadCode;
+    threadTooltipCell = null;
+  }
+
+  function clearThreadFilter() {
+    selectedThreadCode = null;
+  }
+
   function getMinimapCells() {
     const totalCells = pattern.settings.width * pattern.settings.height;
     const sampleStep = Math.max(1, Math.ceil(Math.sqrt(totalCells / minimapRenderCellLimit)));
@@ -1204,7 +1297,7 @@
         </div>
       </div>
 
-      <div class="pointer-events-auto flex w-full flex-col items-stretch gap-2 sm:w-[22rem]">
+      <div class="pointer-events-auto flex w-full flex-col items-stretch gap-2 sm:w-[26rem] md:w-[28rem]">
         <div class="glass-panel border-transparent px-4 py-3 text-right text-sm ring-0">
           <div class="font-medium text-gray-900">Прогресс: {formatProgressPercent(progressPercent)}% · {completedStitchIds.size} / {totalStitches} крестиков</div>
           <div class="mt-1 text-xs text-gray-500">Время: {formatElapsedTime(totalElapsedSeconds)}</div>
@@ -1223,21 +1316,58 @@
                 Закрыть
               </button>
             </div>
-            <ul class="min-h-0 flex-1 space-y-2 overflow-y-auto p-4">
-              {#each pattern.palette as color}
-                <li class="flex items-center justify-between gap-3 text-sm">
-                  <span class="flex min-w-0 items-center gap-3">
-                    <span class="h-6 w-6 shrink-0 rounded-full border border-gray-300 shadow-sm" style="background-color: {color.hex}"></span>
-                    <span class="min-w-0">
-                      <span class="font-mono">{color.code ?? color.name}</span>
-                      <span class="block truncate text-xs text-gray-500">{color.name}</span>
-                    </span>
+            <div class="border-b border-violet-100/25 px-4 py-3 text-xs text-gray-600">
+              {#if selectedThreadLegendItem}
+                <div class="flex flex-wrap items-center gap-2">
+                  <span class="font-medium text-gray-800">
+                    Фильтр: {selectedThreadLegendItem.threadCode}
                   </span>
+                  <button
+                    type="button"
+                    class="rounded-lg bg-white/35 px-2 py-1 font-medium text-violet-700 ring-1 ring-violet-100/80 hover:bg-white/60"
+                    onclick={clearThreadFilter}
+                  >
+                    Показать все цвета
+                  </button>
+                </div>
+              {:else}
+                <span>Выберите строку легенды, чтобы приглушить остальные клетки на схеме.</span>
+              {/if}
+            </div>
+            <div class="grid grid-cols-[minmax(0,1fr)_3.75rem_4.5rem_3.75rem] gap-3 border-b border-violet-100/25 px-4 py-2 text-[0.65rem] font-bold uppercase tracking-wider text-gray-500">
+              <span>Цвет</span>
+              <span>Код</span>
+              <span class="text-right">Прогресс</span>
+              <span class="text-right">Нитки</span>
+            </div>
+            <ul class="min-h-0 flex-1 space-y-2 overflow-y-auto p-4">
+              {#each threadLegendItems as item}
+                <li class="grid grid-cols-[minmax(0,1fr)_3.75rem_4.5rem_3.75rem] items-center gap-3 text-sm">
+                  <button
+                    type="button"
+                    class={`contents ${selectedThreadCode === item.threadCode ? 'text-violet-800' : 'text-gray-700'}`}
+                    aria-label={`${item.threadCode} ${item.color.name}`}
+                    aria-pressed={selectedThreadCode === item.threadCode}
+                    onclick={() => selectThread(item.threadCode)}
+                  >
+                    <span class="flex min-w-0 items-center gap-3 text-left">
+                      <span class="h-6 w-6 shrink-0 rounded-full border border-gray-300 shadow-sm" style="background-color: {item.color.hex}"></span>
+                      <span class="min-w-0">
+                        <span class="block font-medium leading-snug">{item.color.name}</span>
+                        <span class="block truncate text-xs text-gray-500">{item.color.manufacturer || getThreadPaletteLabel()}</span>
+                      </span>
+                    </span>
+                    <span class="font-mono">{item.threadCode}</span>
+                    <span class="text-right text-xs">
+                      <span class="block font-medium text-gray-800">{item.completedStitches} / {item.totalStitches}</span>
+                      <span class="block text-gray-500">{formatProgressPercent(item.progressPercent)}%</span>
+                    </span>
+                  </button>
                   <a
-                    href={getOzonSearchUrl(color)}
+                    href={getOzonSearchUrl(item.color)}
                     target="_blank"
                     rel="noopener noreferrer"
-                    class="shrink-0 rounded-lg bg-white/35 px-2 py-1 text-xs font-medium text-violet-700 ring-1 ring-violet-100/80 hover:bg-white/60"
+                    class="justify-self-end rounded-lg bg-white/25 px-2 py-1 text-xs font-medium text-gray-500 ring-1 ring-gray-200/70 hover:bg-white/55 hover:text-violet-700"
                   >
                     Купить
                   </a>

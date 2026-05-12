@@ -89,6 +89,39 @@ function createPattern(width: number, height: number) {
 	};
 }
 
+function createTwoColorPattern() {
+	return {
+		id: 'pattern-1',
+		schemaVersion: 2,
+		settings: { width: 3, height: 1, threadPalette: 'DMC' },
+		palette: [
+			{ manufacturer: 'DMC', code: '310', name: 'Black', hex: '#000000' },
+			{ manufacturer: 'DMC', code: '743', name: 'Yellow Medium', hex: '#f8c85a' }
+		],
+		patternData: [
+			[
+				{
+					x: 0,
+					y: 0,
+					stitches: [{ id: 'yellow-1', kind: 'full_cross', threadCode: '743' }]
+				},
+				{
+					x: 1,
+					y: 0,
+					stitches: [{ id: 'black-1', kind: 'full_cross', threadCode: '310' }]
+				},
+				{
+					x: 2,
+					y: 0,
+					stitches: [{ id: 'yellow-2', kind: 'full_cross', threadCode: '743' }]
+				}
+			]
+		],
+		backstitches: [],
+		knots: []
+	};
+}
+
 describe('workspace page', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
@@ -139,6 +172,45 @@ describe('workspace page', () => {
 
 		await waitFor(() => expect(screen.getByRole('button', { name: 'Палитра ниток' })).toBeTruthy());
 		expect(screen.queryByRole('heading', { name: 'Палитра DMC' })).toBeNull();
+	});
+
+	it('shows paper legend details and progress for each thread color', async () => {
+		vi.mocked(api.getPattern).mockResolvedValueOnce(createTwoColorPattern());
+		vi.mocked(api.getProgress).mockResolvedValueOnce({
+			completedStitches: [{ stitchId: 'yellow-1' }],
+			elapsedSeconds: 0
+		});
+		render(WorkspacePage);
+
+		await fireEvent.click(await screen.findByRole('button', { name: 'Палитра ниток' }));
+
+		expect(screen.queryByText('Символ')).toBeNull();
+		expect(screen.getByText('Цвет')).toBeTruthy();
+		expect(screen.getByText('Код')).toBeTruthy();
+		expect(screen.getByRole('button', { name: /743 Yellow Medium/ })).toBeTruthy();
+		expect(screen.getByText('1 / 2')).toBeTruthy();
+		expect(screen.getByText('50.0%')).toBeTruthy();
+		expect(screen.getByRole('button', { name: /310 Black/ })).toBeTruthy();
+		expect(screen.getByText('0 / 1')).toBeTruthy();
+		expect(screen.getByRole('button', { name: /743 Yellow Medium/ }).compareDocumentPosition(
+			screen.getByRole('button', { name: /310 Black/ })
+		)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+	});
+
+	it('selects a palette color as a canvas filter', async () => {
+		vi.mocked(api.getPattern).mockResolvedValueOnce(createTwoColorPattern());
+		vi.mocked(api.getProgress).mockResolvedValueOnce({
+			completedStitches: [{ stitchId: 'yellow-1' }],
+			elapsedSeconds: 0
+		});
+		render(WorkspacePage);
+
+		await fireEvent.click(await screen.findByRole('button', { name: 'Палитра ниток' }));
+		await fireEvent.click(screen.getByRole('button', { name: /743 Yellow Medium/ }));
+
+		expect(screen.getByText('Фильтр: 743')).toBeTruthy();
+		expect(screen.getByRole('button', { name: 'Показать все цвета' })).toBeTruthy();
+		expect(screen.queryByRole('button', { name: 'Следующий незакрытый символ' })).toBeNull();
 	});
 
 	it('shows paper-like navigation controls for large patterns', async () => {

@@ -18,7 +18,7 @@ const patterns = [
 		id: 'pattern-1',
 		patternImagePath: 'uploads/pattern-1.png',
 		settings: { width: 40, height: 40 },
-		patternData: [[{ stitches: [{ id: 'stitch-1' }] }]],
+		patternData: [[{ stitches: [{ id: 'stitch-1', threadCode: '743' }] }]],
 		backstitches: [],
 		knots: [],
 		createdAt: '2026-05-10T12:00:00.000Z'
@@ -27,7 +27,12 @@ const patterns = [
 		id: 'pattern-2',
 		patternImagePath: 'uploads/pattern-2.png',
 		settings: { width: 50, height: 30 },
-		patternData: [[{ stitches: [{ id: 'stitch-2' }, { id: 'stitch-3' }] }]],
+		patternData: [
+			[
+				{ stitches: [{ id: 'stitch-2', threadCode: '743' }] },
+				{ stitches: [{ id: 'stitch-3', threadCode: '310' }] }
+			]
+		],
 		backstitches: [],
 		knots: [],
 		createdAt: '2026-05-09T12:00:00.000Z'
@@ -76,6 +81,13 @@ describe('gallery page', () => {
 		expect(screen.getByLabelText('Схема завершена')).toBeTruthy();
 		expect(screen.getByText('Прогресс: 50.0%')).toBeTruthy();
 		expect(screen.getByText('Время: 1м 05с')).toBeTruthy();
+	});
+
+	it('shows remaining stitches and colors for each pattern', async () => {
+		render(GalleryPage);
+
+		await screen.findByText('Осталось: 0 цветов / 0 крестиков');
+		expect(screen.getByText('Осталось: 1 цвет / 1 крестик')).toBeTruthy();
 	});
 
 	it('keeps a pattern when deletion is cancelled', async () => {

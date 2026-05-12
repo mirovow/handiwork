@@ -5,7 +5,10 @@
   import { onMount } from 'svelte';
 
   type PatternCellLike = {
-    stitches?: unknown[];
+    stitches?: Array<{
+      id?: string;
+      threadCode?: string;
+    }>;
   };
 
   type GalleryPattern = {
@@ -80,14 +83,52 @@
     const progress = progressByPatternId[pattern.id];
     const totalStitches = countTotalStitches(pattern);
     const completedStitches = progress?.completedStitches?.length ?? 0;
+    const completedStitchIds = new Set(
+      (progress?.completedStitches ?? [])
+        .map((completedStitch) =>
+          typeof completedStitch === 'object' && completedStitch && 'stitchId' in completedStitch
+            ? String(completedStitch.stitchId)
+            : '',
+        )
+        .filter(Boolean),
+    );
+    const remainingColorCodes = new Set<string>();
+
+    for (const row of pattern.patternData ?? []) {
+      for (const cell of row) {
+        for (const stitch of cell.stitches ?? []) {
+          if (stitch.id && completedStitchIds.has(stitch.id)) continue;
+          remainingColorCodes.add(stitch.threadCode ?? stitch.id ?? 'unknown');
+        }
+      }
+    }
 
     return {
       completedStitches,
       elapsedSeconds: progress?.elapsedSeconds ?? 0,
       isComplete: totalStitches > 0 && completedStitches >= totalStitches,
       percent: calculateProgressPercent(completedStitches, totalStitches),
+      remainingColors: remainingColorCodes.size,
+      remainingStitches: Math.max(0, totalStitches - completedStitches),
       totalStitches,
     };
+  }
+
+  function formatPluralRu(count: number, one: string, few: string, many: string) {
+    const normalizedCount = Math.abs(count) % 100;
+    const lastDigit = normalizedCount % 10;
+
+    if (normalizedCount > 10 && normalizedCount < 20) return many;
+    if (lastDigit === 1) return one;
+    if (lastDigit >= 2 && lastDigit <= 4) return few;
+    return many;
+  }
+
+  function formatRemainingSummary(remainingColors: number, remainingStitches: number) {
+    return [
+      `${remainingColors} ${formatPluralRu(remainingColors, 'цвет', 'цвета', 'цветов')}`,
+      `${remainingStitches} ${formatPluralRu(remainingStitches, 'крестик', 'крестика', 'крестиков')}`,
+    ].join(' / ');
   }
 </script>
 
@@ -140,6 +181,7 @@
                 </p>
                 <div class="mb-4 rounded-2xl bg-white/30 px-3 py-2 text-xs text-gray-600 ring-1 ring-white/40">
                   <p class="font-medium text-gray-800">Прогресс: {formatProgressPercent(patternProgress.percent)}%</p>
+                  <p>Осталось: {formatRemainingSummary(patternProgress.remainingColors, patternProgress.remainingStitches)}</p>
                   <p>Время: {formatElapsedTime(patternProgress.elapsedSeconds)}</p>
                 </div>
               </div>
