@@ -6,6 +6,6 @@ async function bootstrap() {
   const config = getBackendConfig();
   const app = await NestFactory.create(AppModule);
   app.enableCors();
-  await app.listen(config.port);
+  await app.listen(config.port, config.host);
 }
 bootstrap();

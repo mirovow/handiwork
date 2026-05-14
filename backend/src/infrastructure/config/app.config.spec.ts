@@ -16,12 +16,14 @@ describe('app config', () => {
 
   it('uses local development defaults', () => {
     delete process.env.MONGODB_URI;
+    delete process.env.HOST;
     delete process.env.PORT;
     delete process.env.UPLOADS_DIR;
     delete process.env.MAX_UPLOAD_SIZE_BYTES;
 
     expect(getBackendConfig()).toEqual({
       mongoUri: 'mongodb://127.0.0.1:27017/cross_stitch',
+      host: '0.0.0.0',
       port: 3000,
       uploadsDir: 'uploads',
       maxUploadSizeBytes: 10 * 1024 * 1024,
@@ -32,6 +34,7 @@ describe('app config', () => {
 
   it('reads configured environment values', () => {
     process.env.MONGODB_URI = 'mongodb://example/cross_stitch';
+    process.env.HOST = '127.0.0.1';
     process.env.PORT = '4000';
     process.env.UPLOADS_DIR = 'custom-uploads';
     process.env.MAX_UPLOAD_SIZE_BYTES = '2048';
@@ -40,6 +43,7 @@ describe('app config', () => {
 
     expect(getBackendConfig()).toMatchObject({
       mongoUri: 'mongodb://example/cross_stitch',
+      host: '127.0.0.1',
       port: 4000,
       uploadsDir: 'custom-uploads',
       maxUploadSizeBytes: 2048,

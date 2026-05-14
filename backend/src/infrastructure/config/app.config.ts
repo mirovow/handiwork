@@ -3,6 +3,7 @@ import { isAbsolute, join } from 'path';
 
 export interface BackendConfig {
   mongoUri: string;
+  host: string;
   port: number;
   uploadsDir: string;
   maxUploadSizeBytes: number;
@@ -38,6 +39,7 @@ export function getBackendConfig(env: NodeJS.ProcessEnv = process.env): BackendC
 
   return {
     mongoUri: env.MONGODB_URI ?? 'mongodb://127.0.0.1:27017/cross_stitch',
+    host: env.HOST ?? '0.0.0.0',
     port: parseIntegerEnv(env, 'PORT', 3000),
     uploadsDir: env.UPLOADS_DIR ?? 'uploads',
     maxUploadSizeBytes: parseIntegerEnv(env, 'MAX_UPLOAD_SIZE_BYTES', 10 * 1024 * 1024),

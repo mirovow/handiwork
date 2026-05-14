@@ -1331,7 +1331,7 @@
                   </button>
                 </div>
               {:else}
-                <span>Выберите строку легенды, чтобы приглушить остальные клетки на схеме.</span>
+                <span>Выбери цвет, чтобы приглушить остальные цвета на схеме</span>
               {/if}
             </div>
             <div class="grid grid-cols-[minmax(0,1fr)_3.75rem_4.5rem_3.75rem] gap-3 border-b border-violet-100/25 px-4 py-2 text-[0.65rem] font-bold uppercase tracking-wider text-gray-500">
