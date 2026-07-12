@@ -9,7 +9,7 @@ vi.mock('$app/navigation', () => ({
 
 vi.mock('$lib/api', () => ({
 	api: {
-		getThreadPalettes: vi.fn().mockResolvedValue([{ id: 'DMC', label: 'DMC' }]),
+		getThreadPalettes: vi.fn().mockResolvedValue([{ id: 'GAMMA', label: 'Gamma' }]),
 		uploadImage: vi.fn()
 	}
 }));

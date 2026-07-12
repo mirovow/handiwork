@@ -1,4 +1,4 @@
-export type ThreadPaletteId = 'DMC' | 'ANCHOR';
+export type ThreadPaletteId = 'DMC' | 'ANCHOR' | 'GAMMA';
 
 export interface ThreadColor {
   manufacturer: ThreadPaletteId;
@@ -616,12 +616,99 @@ const ANCHOR_PALETTE: ThreadColor[] = [
   color('ANCHOR', '00403', 'Black', '#000000'),
 ];
 
+// Gamma HEX values and Russian names are sourced from Crosti's Gamma color chart.
+// Gamma's official site publishes conversion tables, but not a machine-readable HEX chart.
+const GAMMA_PALETTE: ThreadColor[] = [
+  color('GAMMA', '0001', 'Светлый бежевый', '#F2EFE5'),
+  color('GAMMA', '0002', 'Коричневый', '#74401D'),
+  color('GAMMA', '0003', 'Васильковый', '#3C5780'),
+  color('GAMMA', '0004', 'Серый', '#B7BBC7'),
+  color('GAMMA', '0008', 'Оливковый', '#929937'),
+  color('GAMMA', '0011', 'Оранжево-красный', '#EA592C'),
+  color('GAMMA', '0012', 'Алый', '#E83124'),
+  color('GAMMA', '0013', 'Изумрудный', '#00793B'),
+  color('GAMMA', '0014', 'Яркий зеленый', '#2E9148'),
+  color('GAMMA', '0016', 'Светлый желтый', '#FEEE89'),
+  color('GAMMA', '0019', 'Светлый оранжевый', '#FFC33A'),
+  color('GAMMA', '0026', 'Темный синий', '#0C1225'),
+  color('GAMMA', '0027', 'Светлый голубой', '#C1D3DF'),
+  color('GAMMA', '0029', 'Хаки-зеленый', '#4F6C33'),
+  color('GAMMA', '0035', 'Хаки', '#6D6F42'),
+  color('GAMMA', '0073', 'Лиловый', '#9F2D6F'),
+  color('GAMMA', '0075', 'Темный лиловый', '#541244'),
+  color('GAMMA', '0076', 'Светлый сиреневый', '#CEB6E4'),
+  color('GAMMA', '0078', 'Светлый фиолетовый', '#9389C1'),
+  color('GAMMA', '0079', 'Фиолетовый', '#6C5086'),
+  color('GAMMA', '0080', 'Сине-фиолетовый', '#7971A0'),
+  color('GAMMA', '0111', 'Сиреневый', '#9F65A4'),
+  color('GAMMA', '0202', 'Розовый', '#F0B7D2'),
+  color('GAMMA', '0210', 'Травяной', '#3E9730'),
+  color('GAMMA', '0302', 'Голубой', '#C1D4EC'),
+  color('GAMMA', '0316', 'Салатовый', '#9BD390'),
+  color('GAMMA', '0415', 'Белый', '#FFFFFF'),
+  color('GAMMA', '0419', 'Темный серый', '#6F6577'),
+  color('GAMMA', '0420', 'Черный', '#010101'),
+  color('GAMMA', '0500', 'Бледный салатовый', '#F3F6D4'),
+  color('GAMMA', '0504', 'Зелёный', '#58A96B'),
+  color('GAMMA', '0611', 'Яркий сиреневый', '#B04A83'),
+  color('GAMMA', '0613', 'Светлый оливковый', '#B3C859'),
+  color('GAMMA', '0729', 'Фиолетовый', '#917297'),
+  color('GAMMA', '0755', 'Серо-голубой', '#A4B5C6'),
+  color('GAMMA', '0756', 'Темный серо-голубой', '#7D98B5'),
+  color('GAMMA', '0803', 'Светлый песочный', '#D8BF95'),
+  color('GAMMA', '0806', 'Темный бежевый', '#BB935C'),
+  color('GAMMA', '0855', 'Бирюзово-голубой', '#7CBEC6'),
+  color('GAMMA', '0906', 'Темный розовый', '#C2596D'),
+  color('GAMMA', '0954', 'Мята', '#8EBEA9'),
+  color('GAMMA', '0957', 'Серо-зеленый', '#496F5C'),
+  color('GAMMA', '1095', 'Светлый сиреневый', '#D0C8E4'),
+  color('GAMMA', '3026', 'Персик', '#DFB090'),
+  color('GAMMA', '3028', 'Молочный шоколад', '#B68472'),
+  color('GAMMA', '3037', 'Хаки', '#938962'),
+  color('GAMMA', '3075', 'Яркий розовый', '#FF988E'),
+  color('GAMMA', '3080', 'Яркий розовый', '#FF7A90'),
+  color('GAMMA', '3089', 'Темный розовый', '#E56D7F'),
+  color('GAMMA', '3107', 'Сиреневый', '#B698C6'),
+  color('GAMMA', '3111', 'Серо-сиреневый', '#686D8D'),
+  color('GAMMA', '3114', 'Синий', '#190F60'),
+  color('GAMMA', '3120', 'Темный-темный синий', '#02101C'),
+  color('GAMMA', '3121', 'Голубой', '#57BAF5'),
+  color('GAMMA', '3133', 'Темный-темный бирюзовый', '#008679'),
+  color('GAMMA', '3135', 'Зеленый', '#009A7B'),
+  color('GAMMA', '3140', 'Бледный зеленый', '#A2CCAA'),
+  color('GAMMA', '3143', 'Серо-зеленый', '#4C7C60'),
+  color('GAMMA', '3149', 'Темный зеленый', '#005D2E'),
+  color('GAMMA', '3157', 'Салатовый', '#8CBC5C'),
+  color('GAMMA', '3161', 'Бледный хаки', '#98A859'),
+  color('GAMMA', '3209', 'Светлый персиковый', '#F7B25C'),
+  color('GAMMA', '3213', 'Темный кремовый', '#F2C6B8'),
+  color('GAMMA', '3216', 'Коричневый', '#8C593E'),
+  color('GAMMA', '3219', 'Темный-темный коричневый', '#2D1705'),
+  color('GAMMA', '3228', 'Темный коричневый хаки', '#3B2E08'),
+  color('GAMMA', '3233', 'Темный серый', '#323A39'),
+  color('GAMMA', '3251', 'Светлый сиреневый', '#DFC0DB'),
+  color('GAMMA', '5174', 'Морская волна', '#5A8D9E'),
+  color('GAMMA', '5184', 'Черно-серый', '#2B2E24'),
+  color('GAMMA', '5188', 'Серый', '#6A7B84'),
+  color('GAMMA', '5192', 'Темный серо-зеленый', '#313C2E'),
+  color('GAMMA', '5193', 'Бежево-сиреневый', '#776672'),
+  color('GAMMA', '5194', 'Серо-сиреневый', '#68637E'),
+  color('GAMMA', '5195', 'Темный-темный зеленый', '#212F23'),
+  color('GAMMA', '5204', 'Темный-темный сиреневый', '#2C253E'),
+  color('GAMMA', '5207', 'Светлый мятный', '#C3ECC1'),
+  color('GAMMA', '5220', 'Темный серый', '#4F5A6A'),
+  color('GAMMA', '6035', 'Светлый бирюзовый', '#CAE8DE'),
+  color('GAMMA', '6080', 'Светлый сиреневый', '#EBC7DF'),
+];
+
 const THREAD_PALETTES: Record<ThreadPaletteId, ThreadColor[]> = {
   DMC: DMC_PALETTE,
   ANCHOR: ANCHOR_PALETTE,
+  GAMMA: GAMMA_PALETTE,
 };
 
 const THREAD_PALETTE_SUMMARIES: ThreadPaletteSummary[] = [
+  { id: 'GAMMA', label: 'Gamma' },
   { id: 'DMC', label: 'DMC' },
   { id: 'ANCHOR', label: 'Anchor' },
 ];
@@ -631,7 +718,7 @@ export function getAvailableThreadPalettes(): ThreadPaletteSummary[] {
 }
 
 export function isThreadPaletteId(value: string | undefined): value is ThreadPaletteId {
-  return value === 'DMC' || value === 'ANCHOR';
+  return value === 'DMC' || value === 'ANCHOR' || value === 'GAMMA';
 }
 
 export function getThreadPalette(paletteId: ThreadPaletteId): ThreadColor[] {

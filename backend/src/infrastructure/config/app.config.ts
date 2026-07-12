@@ -9,6 +9,12 @@ export interface BackendConfig {
   maxUploadSizeBytes: number;
   minPatternSize: number;
   maxPatternSize: number;
+  basicAuth?: BasicAuthConfig;
+}
+
+export interface BasicAuthConfig {
+  username: string;
+  password: string;
 }
 
 function parseIntegerEnv(
@@ -29,6 +35,30 @@ function parseIntegerEnv(
   return parsed;
 }
 
+function readOptionalEnv(env: NodeJS.ProcessEnv, key: string): string | undefined {
+  const rawValue = env[key];
+  return rawValue === undefined || rawValue === '' ? undefined : rawValue;
+}
+
+function getBasicAuthConfig(env: NodeJS.ProcessEnv): BasicAuthConfig | undefined {
+  const username = readOptionalEnv(env, 'BASIC_AUTH_USERNAME');
+  const password = readOptionalEnv(env, 'BASIC_AUTH_PASSWORD');
+
+  if (username === undefined && password === undefined) {
+    if (env.NODE_ENV === 'production') {
+      throw new Error('BASIC_AUTH_USERNAME and BASIC_AUTH_PASSWORD are required in production');
+    }
+
+    return undefined;
+  }
+
+  if (username === undefined || password === undefined) {
+    throw new Error('BASIC_AUTH_USERNAME and BASIC_AUTH_PASSWORD must be configured together');
+  }
+
+  return { username, password };
+}
+
 export function getBackendConfig(env: NodeJS.ProcessEnv = process.env): BackendConfig {
   const minPatternSize = parseIntegerEnv(env, 'MIN_PATTERN_SIZE', 10);
   const maxPatternSize = parseIntegerEnv(env, 'MAX_PATTERN_SIZE', 500);
@@ -45,6 +75,7 @@ export function getBackendConfig(env: NodeJS.ProcessEnv = process.env): BackendC
     maxUploadSizeBytes: parseIntegerEnv(env, 'MAX_UPLOAD_SIZE_BYTES', 10 * 1024 * 1024),
     minPatternSize,
     maxPatternSize,
+    basicAuth: getBasicAuthConfig(env),
   };
 }
 

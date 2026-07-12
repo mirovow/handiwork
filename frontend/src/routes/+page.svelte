@@ -26,10 +26,10 @@
   let width = $state(40);
   let height = $state(40);
   let maxColors = $state(10);
-  let threadPalette = $state('DMC');
+  let threadPalette = $state('GAMMA');
   let selectedStitchKinds = $state<StitchKind[]>(['full_cross']);
   let stitchBackground = $state(true);
-  let threadPalettes = $state<ThreadPalette[]>([{ id: 'DMC', label: 'DMC' }]);
+  let threadPalettes = $state<ThreadPalette[]>([{ id: 'GAMMA', label: 'Gamma' }]);
   let isUploading = $state(false);
   let error = $state('');
 

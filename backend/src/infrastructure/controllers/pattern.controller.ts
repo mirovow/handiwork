@@ -36,7 +36,7 @@ const allowedImageMimeTypes = new Set(['image/png', 'image/jpeg']);
 const defaultMaxColors = 30;
 const minMaxColors = 2;
 const maxMaxColors = 100;
-const defaultThreadPalette: ThreadPaletteId = 'DMC';
+const defaultThreadPalette: ThreadPaletteId = 'GAMMA';
 ensureUploadsDirectory(uploadsPath);
 
 @Controller('patterns')

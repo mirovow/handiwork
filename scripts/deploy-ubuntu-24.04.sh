@@ -164,6 +164,8 @@ UPLOADS_DIR=$UPLOADS_DIR
 MAX_UPLOAD_SIZE_BYTES=10485760
 MIN_PATTERN_SIZE=10
 MAX_PATTERN_SIZE=500
+BASIC_AUTH_USERNAME=$BASIC_AUTH_USER
+BASIC_AUTH_PASSWORD=$BASIC_AUTH_PASSWORD
 NODE_ENV=production
 EOF
   chmod 0640 "$BACKEND_ENV"
@@ -206,6 +208,8 @@ configure_basic_auth() {
   log "Configuring Nginx Basic Auth"
   install -d -m 0750 "$ENV_DIR"
   printf '%s\n' "$BASIC_AUTH_PASSWORD" | htpasswd -B -i -c "$NGINX_AUTH_FILE" "$BASIC_AUTH_USER" >/dev/null
+  chown root:www-data "$ENV_DIR"
+  chmod 0750 "$ENV_DIR"
   chown root:www-data "$NGINX_AUTH_FILE"
   chmod 0640 "$NGINX_AUTH_FILE"
 }
@@ -257,7 +261,30 @@ smoke_check() {
   systemctl is-active --quiet mongod
   systemctl is-active --quiet "$APP_NAME-backend.service"
   systemctl is-active --quiet nginx
-  curl -fsS "http://127.0.0.1:$BACKEND_PORT/" >/dev/null
+
+  BACKEND_READY=0
+  i=1
+  while [ "$i" -le 30 ]; do
+    if curl -fsS -u "$BASIC_AUTH_USER:$BASIC_AUTH_PASSWORD" "http://127.0.0.1:$BACKEND_PORT/" >/dev/null 2>&1; then
+      BACKEND_READY=1
+      break
+    fi
+
+    if ! systemctl is-active --quiet "$APP_NAME-backend.service"; then
+      break
+    fi
+
+    sleep 1
+    i=$((i + 1))
+  done
+
+  if [ "$BACKEND_READY" -ne 1 ]; then
+    systemctl status "$APP_NAME-backend.service" --no-pager || true
+    journalctl -u "$APP_NAME-backend.service" -n 80 --no-pager || true
+    printf '%s\n' "Backend did not become ready on 127.0.0.1:$BACKEND_PORT." >&2
+    exit 1
+  fi
+
   curl -fsS -u "$BASIC_AUTH_USER:$BASIC_AUTH_PASSWORD" "http://127.0.0.1/" >/dev/null
 
   if ss -ltn | grep -q "0.0.0.0:$MONGO_PORT"; then

@@ -73,21 +73,22 @@ describe('PatternController', () => {
     ).rejects.toThrow(BadRequestException);
   });
 
-  it('returns available thread palettes', () => {
+  it('returns available thread palettes with Gamma first', () => {
     expect(controller.getThreadPalettes()).toEqual([
+      { id: 'GAMMA', label: 'Gamma' },
       { id: 'DMC', label: 'DMC' },
       { id: 'ANCHOR', label: 'Anchor' },
     ]);
   });
 
-  it('uses the default max colors when it is omitted', async () => {
+  it('uses the default max colors and Gamma palette when they are omitted', async () => {
     await controller.createPattern(validFile, '120', '80', undefined, undefined, undefined, undefined);
 
     expect(generatePatternUseCase.execute).toHaveBeenCalledWith('uploads/source.png', {
       width: 120,
       height: 80,
       maxColors: 30,
-      threadPalette: 'DMC',
+      threadPalette: 'GAMMA',
       selectedStitchKinds: ['full_cross'],
       stitchBackground: true,
     });
